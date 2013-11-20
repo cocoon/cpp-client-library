@@ -36,8 +36,32 @@ CloudApi::~CloudApi()
  */
 CloudApi::UserInfo CloudApi::Login(const std::string &user, const std::string &password)
 {
-	// @@ TODO
-	return UserInfo();
+	UserInfo loginInfo;
+
+	std::map<YString, YString> headerFields;
+	SetCommonHeaderFields(headerFields);
+
+	JSON::Object login;
+
+	login.Set<YString>("username", user);
+	login.Set<YString>("password", password);
+	
+	auto result = ProcessRequest("auth_client", headerFields, login, Time::Zero(), true)->AsObject();
+	
+	m_config.authToken = result.Get<YString>("auth_token");
+	auto clientId = result.Get<uint64_t>("client_id");
+	m_config.userId = result.Get<uint32_t>("user_id");
+	m_config.loggedInUser = user;
+
+	loginInfo.authToken = m_param.authToken;
+	loginInfo.clientId = clientId;
+	loginInfo.userId = m_param.userId;
+	loginInfo.userEmails.push_back(user);
+	loginInfo.firstName = result.Get<YString>("first_name");
+	loginInfo.lastName = result.Get<YString>("last_name");
+	loginInfo.pushToken = result.Get<YString>("push_token");
+
+	return loginInfo;
 }
 
 /**
@@ -45,8 +69,33 @@ CloudApi::UserInfo CloudApi::Login(const std::string &user, const std::string &p
  */
 CloudApi::UserInfo CloudApi::Authenticate(const std::string &authtoken)
 {
-	// @@ TODO
-	return UserInfo();
+	UserInfo loginInfo;
+
+	std::map<YString, YString> headerFields;
+	SetCommonHeaderFields(headerFields, authToken);
+
+	auto result = ProcessRequest("check_auth", headerFields)->AsObject();
+
+	auto clientId = result.Get<uint64_t>("client_id");
+	m_param.userId = result.Get<uint32_t>("user_id");
+	m_param.authToken = authToken;
+
+	loginInfo.authToken = authToken;
+	loginInfo.clientId = clientId;
+	loginInfo.userId = m_param.userId;
+
+	auto emails = result.Get<JSON::YArray>("emails");
+	foreach(auto email, emails)
+	{
+		auto address = email->AsObject().Get<YString>("email");
+		loginInfo.userEmails.push_back(address);
+	}
+
+	loginInfo.firstName = result.Get<YString>("first_name");
+	loginInfo.lastName = result.Get<YString>("last_name");
+	loginInfo.pushToken = result.Get<YString>("push_token");
+
+	return loginInfo;
 }
 
 /**
