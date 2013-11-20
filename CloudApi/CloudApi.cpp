@@ -38,28 +38,30 @@ CloudApi::UserInfo CloudApi::Login(const std::string &user, const std::string &p
 {
 	UserInfo loginInfo;
 
-	std::map<YString, YString> headerFields;
+	std::map<std::string, std::string> headerFields;
 	SetCommonHeaderFields(headerFields);
 
 	JSON::Object login;
 
-	login.Set<YString>("username", user);
-	login.Set<YString>("password", password);
+	login.Set<std::string>("username", user);
+	login.Set<std::string>("password", password);
+
+	std::cout << "Sending request " << login.AsString() << std::endl;
 	
-	auto result = ProcessRequest("auth_client", headerFields, login, Time::Zero(), true)->AsObject();
+	auto result = ProcessRequest("auth_client", headerFields, login)->AsObject();
 	
-	m_config.authToken = result.Get<YString>("auth_token");
+	m_config.authToken = result.Get<std::string>("auth_token");
 	auto clientId = result.Get<uint64_t>("client_id");
 	m_config.userId = result.Get<uint32_t>("user_id");
 	m_config.loggedInUser = user;
 
-	loginInfo.authToken = m_param.authToken;
+	loginInfo.authToken = m_config.authToken;
 	loginInfo.clientId = clientId;
-	loginInfo.userId = m_param.userId;
-	loginInfo.userEmails.push_back(user);
-	loginInfo.firstName = result.Get<YString>("first_name");
-	loginInfo.lastName = result.Get<YString>("last_name");
-	loginInfo.pushToken = result.Get<YString>("push_token");
+	loginInfo.userId = m_config.userId;
+	loginInfo.emails.push_back(user);
+	loginInfo.firstName = result.Get<std::string>("first_name");
+	loginInfo.lastName = result.Get<std::string>("last_name");
+	loginInfo.pushToken = result.Get<std::string>("push_token");
 
 	return loginInfo;
 }
@@ -67,33 +69,33 @@ CloudApi::UserInfo CloudApi::Login(const std::string &user, const std::string &p
 /**
  * Authenticate - Re-authenticates the user, except just the auth token is re-verified
  */
-CloudApi::UserInfo CloudApi::Authenticate(const std::string &authtoken)
+CloudApi::UserInfo CloudApi::Authenticate(const std::string &authToken)
 {
 	UserInfo loginInfo;
 
-	std::map<YString, YString> headerFields;
+	std::map<std::string, std::string> headerFields;
 	SetCommonHeaderFields(headerFields, authToken);
 
 	auto result = ProcessRequest("check_auth", headerFields)->AsObject();
 
 	auto clientId = result.Get<uint64_t>("client_id");
-	m_param.userId = result.Get<uint32_t>("user_id");
-	m_param.authToken = authToken;
+	m_config.userId = result.Get<uint32_t>("user_id");
+	m_config.authToken = authToken;
 
 	loginInfo.authToken = authToken;
 	loginInfo.clientId = clientId;
-	loginInfo.userId = m_param.userId;
+	loginInfo.userId = m_config.userId;
 
-	auto emails = result.Get<JSON::YArray>("emails");
-	foreach(auto email, emails)
+	auto emails = result.Get<JSON::Array>("emails");
+	for(auto email : emails)
 	{
-		auto address = email->AsObject().Get<YString>("email");
-		loginInfo.userEmails.push_back(address);
+		auto address = email->AsObject().Get<std::string>("email");
+		loginInfo.emails.push_back(address);
 	}
 
-	loginInfo.firstName = result.Get<YString>("first_name");
-	loginInfo.lastName = result.Get<YString>("last_name");
-	loginInfo.pushToken = result.Get<YString>("push_token");
+	loginInfo.firstName = result.Get<std::string>("first_name");
+	loginInfo.lastName = result.Get<std::string>("last_name");
+	loginInfo.pushToken = result.Get<std::string>("push_token");
 
 	return loginInfo;
 }
@@ -154,17 +156,16 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	headerFields.clear();
 	auto callbackInfo = std::make_pair(this, &headerFields);
 	curl_easy_setopt(m_curl, CURLOPT_WRITEHEADER, &callbackInfo);
-	/*
-	curl_easy_setopt(m_curl, CURLOPT_HEADERFUNCTION, [](void *ptr, size_t size, size_t nmemb, std::pair<YHttpClient *, std::map<std::string, std::string> *> *info)
+	curl_easy_setopt(m_curl, CURLOPT_HEADERFUNCTION, 
+		[](void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info)
 		{
 			auto headerLine = reinterpret_cast<char *>(ptr);
-			auto keyValue = std::string(pHeaderLine).Split(": ");
-			keyValue.first.erase(std::remove_if(keyValue.first.begin(), keyValue.first.end(), ::isspace), keyValue.first.end());
-			keyValue.second.erase(std::remove_if(keyValue.second.begin(), keyValue.second.end(), ::isspace), keyValue.second.end());
-			info->second->operator[](keyValue.first) = keyValue.second;
+			auto keys = SplitString(headerLine, ':');
+			keys[0].erase(std::remove_if(keys[0].begin(), keys[0].end(), ::isspace), keys[0].end());
+			keys[1].erase(std::remove_if(keys[1].begin(), keys[1].end(), ::isspace), keys[1].end());
+			info->second->operator[](keys[0]) = keys[1];
 			return size * nmemb;
-		}
-	*/
+		});
 
 	try
 	{
@@ -183,16 +184,42 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 
 void CloudApi::Perform()
 {
+	if(m_config.curlDebug)
+	{
+		curl_easy_setopt(m_curl, CURLOPT_VERBOSE, 1);
+		curl_easy_setopt(m_curl, CURLOPT_DEBUGFUNCTION, 
+			[](CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra)->int
+			{
+				if(!size)
+					return 0;
+
+				switch(infoType)
+				{
+					case CURLINFO_TEXT:
+						std::cout << std::string(data, size) << std::endl;
+						break;
+					case CURLINFO_HEADER_IN:
+						std::cout << "HEADER <- " << std::string(data, size) << std::endl;
+						break;
+					case CURLINFO_HEADER_OUT:
+						std::cout << "HEADER -> " << std::string(data, size) << std::endl;
+						break;
+				}
+
+				return 0;
+			});
+	}
+
 	curl_easy_setopt(m_curl, CURLOPT_ENCODING, "gzip,deflate");
 	uint32_t httpStatus;
 	auto result = curl_easy_perform(m_curl);
 	curl_easy_getinfo(m_curl, CURLINFO_RESPONSE_CODE, &httpStatus);
 
 	if(result != CURLE_OK)
-		std::rethrow_exception(std::make_exception_ptr(std::logic_error(curl_easy_strerror(result))));
+		throw std::logic_error(curl_easy_strerror(result));
 	// Allow 302 - Found (redirect) 200 - OK http status codes
 	else if(httpStatus && httpStatus != 200 && httpStatus != 302)
-		std::rethrow_exception(std::make_exception_ptr(std::logic_error("Unexpected http status")));
+		throw std::logic_error("Unexpected http status");
 }
 
 std::string CloudApi::EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request)

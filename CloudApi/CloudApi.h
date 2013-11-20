@@ -23,6 +23,12 @@ public:
 		// Name of user logged in (arbritrary)
 		std::string sessionUser;
 
+		// User id of logged in user
+		uint64_t userId;
+
+		// Logged in user email
+		std::string loggedInUser;
+
 		// Some unique value tied to the physical system 
 		// must match what was used at login, if an auth token is used
 		// to authenticate
@@ -36,7 +42,10 @@ public:
 		std::string clientType = PlatformName;
 
 		// Address to connect to
-		std::string address = "https://api.copy.com";
+		std::string address = "http://api.copy.com";
+
+		// Enabled to log detailed output to screen
+		bool curlDebug = true;
 	};
 
 	// This structure decribes a chunk of data
@@ -60,6 +69,10 @@ public:
 	struct UserInfo
 	{
 		uint64_t userId = 0;
+		uint64_t clientId = 0;
+		std::string firstName;
+		std::string lastName;
+		std::string pushToken;
 		std::string pushUrl;
 		std::string authToken;
 		std::vector<std::string> emails;
@@ -107,9 +120,9 @@ public:
 protected:
 	void Perform();
 	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data);
-	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &authToken);
+	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &authToken = "");
 	std::string EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request);
-	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request);
+	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request = JSON::Object());
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);
 	CloudError MapCloudError(uint32_t errorCode);
 
