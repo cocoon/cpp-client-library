@@ -16,5 +16,26 @@ namespace CopyExample
 
 		return result;
 	}
+
+	inline std::string PrettySize(uint64_t bytes)
+	{
+		if(bytes > 1024 * 1024 * 1000)
+		{
+			bytes /= 1024 * 1024 * 1000;
+			return std::to_string(bytes) + "GB";
+		}
+		else if(bytes > 1024 * 1024)
+		{
+			bytes /= 1024 * 1024;
+			return std::to_string(bytes) + "MB";
+		}
+		else if(bytes > 1024)
+		{
+			bytes /= 1024;
+			return std::to_string(bytes) + "kB";
+		}
+		else
+			return std::to_string(bytes) + "B";
+	}
 }
 

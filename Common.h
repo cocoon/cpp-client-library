@@ -93,24 +93,7 @@
 #define NET16_CPU(x)	BE16_CPU(x)
 #define NET8_CPU(x)	BE8_CPU(x)
 
-namespace CopyExample
-{
-	inline std::pair<std::string, std::string> SplitString(std::string s, const std::string &delim) 
-	{
-		auto position = s.find(delim);
-		if(position == std::string::npos)
-			return std::make_pair(s, "");
-
-		std::pair<std::string, std::string> result;
-
-		result.second = s.substr(position + delim.size());
-		s.resize(s.size() - position + delim.size());
-		result.first = s;
-
-		return result;
-	}
-}
-
+#include "Util/Util.h"
 #include "CloudApi/CloudApi.h"
 
 #endif

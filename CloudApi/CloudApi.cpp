@@ -54,7 +54,7 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
 		curlList = curl_slist_append(curlList, (iter->first + std::string(": ") + iter->second).c_str());
-
+	
 	auto callbackData = std::make_pair(this, &response);
 	curl_easy_setopt(m_curl, CURLOPT_URL, completeUrl.c_str());
 	curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, curlList);
@@ -171,8 +171,6 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	JSON::Object main_request;
 	main_request.Set<std::string>("path", config.path);
 
-	if(config.maxSize)
-		main_request.Set<std::string>("max_size", std::to_string(config.maxSize));
 	if(config.maxCount)
 		main_request.Set<std::string>("max_items", std::to_string(config.maxCount));
 
@@ -182,6 +180,7 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	main_request.Set<std::string>("include_parts", std::to_string(config.includeParts));
 	main_request.Set<std::string>("include_child_counts", std::to_string(config.includeChildCounts));
 	main_request.Set<std::string>("include_attributes", std::to_string(1));
+	main_request.Set<std::string>("include_sync_filters", std::to_string(0));
 
 	if(!config.filter.empty())
 		main_request.Set<std::string>("filter_name", config.filter);

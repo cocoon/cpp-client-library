@@ -125,7 +125,6 @@ public:
 		bool recurse = false;
 		bool includeChildCounts = false;
 		uint32_t maxCount = 50;
-		uint32_t maxSize = 1024 * 1024 * 5;
 		bool groupByDir = false;
 		std::string filter;
 		std::string sortField;
