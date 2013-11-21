@@ -2,6 +2,7 @@
 
 #include "Common.h"
 #include "JSON.h"
+#include <liboauthcpp/liboauthcpp.h>
 
 namespace CopyExample {
 
@@ -112,11 +113,43 @@ public:
 		std::string m_prepared;
 	};
 
-	CloudApi(const Config &param);
+	CloudApi(Config param);
 	~CloudApi();
 
 	void SendNeededParts(const std::vector<PartInfo> &parts);
 	void CreateFile(const std::string &path, const std::vector<PartInfo> &parts);
+
+	struct CloudObj
+	{
+		std::string path;
+		std::string type;
+		uint64_t childCount = 0;
+		std::vector<PartInfo> parts;
+
+		explicit operator bool () const { return !path.empty(); }
+	};
+
+	struct ListResult
+	{
+		CloudObj root;
+		std::vector<CloudObj> children;
+		bool more = false;
+	};
+
+	struct ListConfig 
+	{
+		uint64_t index = 0;
+		bool includeParts = false;
+		bool recurse = false;
+		uint32_t maxCount = 50;
+		uint32_t maxSize = 1024 * 1024 * 5;
+		bool groupByDir = false;
+		std::string filter;
+		std::string sortField;
+		std::string sortDirection;
+	};
+
+	ListResult ListPath(ListConfig &config);
 
 protected:
 	void Perform();
@@ -126,10 +159,14 @@ protected:
 	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request = JSON::Object());
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);
 	CloudError MapCloudError(uint32_t errorCode);
+	CloudObj ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo);
 
 	Config m_config;
 	static std::once_flag s_hasInitializedCurl;
 	void *m_curl = nullptr;
+
+	OAuth::Consumer m_oauthConsumer;
+	OAuth::Token m_oauthToken;
 };
 
 }

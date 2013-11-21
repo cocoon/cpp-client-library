@@ -107,18 +107,26 @@ namespace CopyExample
 
 namespace CopyExample
 {
-	inline std::vector<std::string> &SplitString(const std::string &s, char delim, std::vector<std::string> &elems) 
+	inline std::vector<std::string> &SplitString(const std::string &s, const std::string &delim, std::vector<std::string> &elems) 
 	{
 		std::stringstream ss(s);
 		std::string item;
 
-		while(std::getline(ss, item, delim)) 
+		bool result = false;
+
+		for(auto &_delim : delim)
+		{
+			if(_delim)
+				result = std::getline(ss, item, _delim);
+		}
+
+		if(result)
 			elems.push_back(item);
 
 		return elems;
 	}
 
-	inline std::vector<std::string> SplitString(const std::string &s, char delim) 
+	inline std::vector<std::string> SplitString(const std::string &s, const std::string &delim) 
 	{
 		std::vector<std::string> elems;
 		SplitString(s, delim, elems);

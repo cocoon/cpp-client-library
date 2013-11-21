@@ -1,6 +1,7 @@
-find_package(CURL REQUIRED)
-add_executable(CopyExample Main.cpp)
-add_dependencies(CopyExample JSON CloudApi)
-link_directories(${CURL_INCLUDE_DIRS})
-target_link_libraries(CopyExample JSON CloudApi ${CURL_LIBRARIES})
+FIND_PACKAGE(CURL REQUIRED)
+FIND_PACKAGE(Boost 1.54 COMPONENTS program_options REQUIRED)
+ADD_EXECUTABLE(CopyExample Main.cpp)
+ADD_DEPENDENCIES(CopyExample JSON CloudApi)
+LINK_DIRECTORIES(${CURL_INCLUDE_DIRS} ${Boost_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(CopyExample JSON CloudApi ${CURL_LIBRARIES} ${Boost_LIBRARIES})
 

@@ -8,8 +8,9 @@ std::once_flag CloudApi::s_hasInitializedCurl;
  * CloudApi - Constructs the cloud api instance, the Config structure
  * contains all the required configuration options
  */
-CloudApi::CloudApi(const Config &param) :
-	m_config(param)
+CloudApi::CloudApi(Config param) :
+	m_config(param), m_oauthConsumer(param.consumerKey, param.consumerSecret),
+	m_oauthToken(param.accessToken, param.accessTokenSecret)
 {
 	std::call_once(s_hasInitializedCurl, []() { curl_global_init(CURL_GLOBAL_ALL); });
 
@@ -28,76 +29,6 @@ CloudApi::CloudApi(const Config &param) :
 CloudApi::~CloudApi()
 {
 	curl_easy_cleanup(m_curl);
-}
-
-/**
- * Login - Logs in with a user and password combo, returns a UserInfo structure 
- * that contains all the required authentication informatino for the user
- */
-CloudApi::UserInfo CloudApi::Login(const std::string &user, const std::string &password)
-{
-	UserInfo loginInfo;
-
-	std::map<std::string, std::string> headerFields;
-	SetCommonHeaderFields(headerFields);
-
-	JSON::Object login;
-
-	login.Set<std::string>("username", user);
-	login.Set<std::string>("password", password);
-
-	std::cout << "Sending request " << login.AsString() << std::endl;
-	
-	auto result = ProcessRequest("auth_client", headerFields, login)->AsObject();
-	
-	m_config.authToken = result.Get<std::string>("auth_token");
-	auto clientId = result.Get<uint64_t>("client_id");
-	m_config.userId = result.Get<uint32_t>("user_id");
-	m_config.loggedInUser = user;
-
-	loginInfo.authToken = m_config.authToken;
-	loginInfo.clientId = clientId;
-	loginInfo.userId = m_config.userId;
-	loginInfo.emails.push_back(user);
-	loginInfo.firstName = result.Get<std::string>("first_name");
-	loginInfo.lastName = result.Get<std::string>("last_name");
-	loginInfo.pushToken = result.Get<std::string>("push_token");
-
-	return loginInfo;
-}
-
-/**
- * Authenticate - Re-authenticates the user, except just the auth token is re-verified
- */
-CloudApi::UserInfo CloudApi::Authenticate(const std::string &authToken)
-{
-	UserInfo loginInfo;
-
-	std::map<std::string, std::string> headerFields;
-	SetCommonHeaderFields(headerFields, authToken);
-
-	auto result = ProcessRequest("check_auth", headerFields)->AsObject();
-
-	auto clientId = result.Get<uint64_t>("client_id");
-	m_config.userId = result.Get<uint32_t>("user_id");
-	m_config.authToken = authToken;
-
-	loginInfo.authToken = authToken;
-	loginInfo.clientId = clientId;
-	loginInfo.userId = m_config.userId;
-
-	auto emails = result.Get<JSON::Array>("emails");
-	for(auto email : emails)
-	{
-		auto address = email->AsObject().Get<std::string>("email");
-		loginInfo.emails.push_back(address);
-	}
-
-	loginInfo.firstName = result.Get<std::string>("first_name");
-	loginInfo.lastName = result.Get<std::string>("last_name");
-	loginInfo.pushToken = result.Get<std::string>("push_token");
-
-	return loginInfo;
 }
 
 /**
@@ -165,7 +96,7 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 		{
 			std::cout << "Writing headers " << std::endl;
 			auto headerLine = reinterpret_cast<char *>(ptr);
-			auto keys = SplitString(headerLine, ':');
+			auto keys = SplitString(headerLine, ":");
 			keys[0].erase(std::remove_if(keys[0].begin(), keys[0].end(), ::isspace), keys[0].end());
 			keys[1].erase(std::remove_if(keys[1].begin(), keys[1].end(), ::isspace), keys[1].end());
 			info->second->operator[](keys[0]) = keys[1];
@@ -227,6 +158,306 @@ void CloudApi::Perform()
 		throw std::logic_error("Unexpected http status");
 }
 
+/**
+ * ListPath - List cloudObj at a specific path
+ */
+CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
+{
+	std::map<std::string, std::string> headerFields;
+	SetCommonHeaderFields(headerFields, "jsonrpc");
+	ListResult result;
+	bool firstTime = !config.index;
+
+	BRTLOG(CSM_CLOUD, "Listing path " << File::ConvertToOsPathSep(File::RemovePathSep(config.relPath), "/"));
+
+	if(Thread::YThread::IsThreadTerminated())
+		BRTERROR(CCODE, CSM_EXC, BRTERR_OPERATOR_CANCEL);
+
+	JSON::Object main_request;
+	main_request.Set<std::string>("path", File::ConvertToOsPathSep(File::RemovePathSep(config.relPath), "/"));
+
+	if(config.maxSize)
+		main_request.Set<std::string>("max_size", Util::NumberToString<uint64_t>(config.maxSize));
+	if(config.maxCount)
+		main_request.Set<std::string>("max_items", Util::NumberToString<uint64_t>(config.maxCount));
+
+	main_request.Set<std::string>("list_watermark", Util::NumberToString<uint64_t>(config.index));
+	main_request.Set<std::string>("include_total_items", Util::NumberToString<uint32_t>(0));
+	main_request.Set<std::string>("recurse", Util::NumberToString<uint32_t>(config.recurse));
+	main_request.Set<std::string>("include_parts", Util::NumberToString<uint32_t>(config.includeParts));
+	main_request.Set<std::string>("include_child_counts", Util::NumberToString<uint32_t>(config.includeChildCounts));
+	main_request.Set<std::string>("include_attributes", Util::NumberToString<uint32_t>(1));
+
+	if(config.filter)
+		main_request.Set<std::string>("filter_name", config.filter);
+
+	if(config.groupByDir)
+		main_request.Set<std::string>("group_by_dir", std::to_string(config.groupByDir));
+
+	if(config.sortField)
+		main_request.Set<std::string>("sort_field", config.sortField);
+
+	if(config.sortDirection)
+		main_request.Set<std::string>("sort_direction", config.sortDirection);
+
+	auto list_result = ProcessRequest("list_objects", headerFields, main_request)->AsObject();
+
+	config.index = list_result.Get<uint64_t>("list_watermark");
+	result.more = list_result.Get<uint32_t>("more_items");
+
+	// Force sync index to increment so we don't loop forever
+	if(!config.index)
+		config.index = config.index + 1;
+
+	if(list_result.GetType("children") == JSON::JSONType_Null)
+		return result;
+	auto cloudObjArray = list_result.Get<JSON::Array>("children");
+
+	// First pass include root at start
+	if(firstTime && config.includeRoot)
+	{
+		if(list_result.GetType("object") == JSON::JSONType_Null)
+		{
+			BRTLOG(CRITICAL, "No object field in list objects");
+			BRTERROR(CCODE, CRITICAL, CSMERR_CLOUD_RESPONSE_FAILURE);
+		}
+		auto parentInfo = list_result.Get<JSON::ValuePtr>("object");
+
+		CloudObj rootObject;
+		
+		result.root = ParseCloudObj(config.includeParts, parentInfo);
+	}
+
+	foreach(auto &cloudObjInfo, cloudObjArray)
+	{
+		auto cloudObj = ParseCloudObj(config.includeParts, cloudObjInfo);
+		if(cloudObj)
+		{
+			if(config.includeDeleted && cloudObj->file.attributes & BRTFILE_AT_DIRECTORY)
+				cloudObj->file.childCount = 1;
+			if(config.pattern.IsEmpty() || Match::RegExp(File::GetFileFromPath(cloudObj->file.relPath), config.pattern))
+				result.children.push_back(cloudObj);
+		}
+	}
+
+	return result;
+}
+
+CloudObj YCloudApi::ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo, uint32_t eventFlags)
+{
+	auto cloudObjInfoObj = cloudObjInfo->AsObject();
+
+	CloudObj obj;
+
+	if(!cloudObjInfoObj.Has("path"))
+		return CloudObj();
+
+	std::string type = cloudObjInfoObj.GetOpt<std::string>("type", cloudObjInfoObj.GetOpt<std::string>("object_type", ""));
+	auto path = cloudObjInfoObj.Get<std::string>("path");
+
+	path = File::ConvertToOsPathSep(path);
+
+	obj.objectId = cloudObjInfoObj.GetOpt<uint64_t>("object_id", 0);
+	obj.removedTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("removed_time", 0));
+	obj.createdTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("created_time", 0));
+	obj.modifiedTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("modified_time", 0));
+	obj.clientId = cloudObjInfoObj.GetOpt<uint64_t>("client_id", 0);
+	obj.shareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
+
+	obj.file.childCount = cloudObjInfoObj.GetOpt<uint32_t>("children_count", 0);
+
+	obj.file.mtime = obj.modifiedTime;
+	obj.file.ctime = obj.createdTime;
+
+	// For links
+	obj.downloadUrl = cloudObjInfoObj.GetOpt<std::string>("url", "");
+
+
+	// File attributes (optional)
+	if(cloudObjInfoObj.GetType("attributes") == JSON::JSONType_Object)
+	{
+		try
+		{
+			obj.fileMetadata = cloudObjInfoObj.Get<JSON::ValuePtr>("attributes");
+		}
+		catch(YError &error)
+		{
+			BRTLOG_NT(CSM, "Failed to parse cloudObj " << error);
+		}
+	}
+
+	// File link info (optional)
+	if(cloudObjInfoObj.GetType("links") == JSON::JSONType_Array)
+	{
+		foreach(auto &linkValue, cloudObjInfoObj.Get<JSON::ValuePtr>("links")->AsArray())
+			obj.links.push_back(ParseLinkInfo(linkValue));
+	}
+
+	// Remove the leading sploog i sometimes get
+	#ifdef BRTBUILD_UNIX
+		if(path.StartsWith("./"))
+			path.Remove("./", 0, 1);
+
+		if(path.StartsWith("//"))
+			path.Remove("//", 0, 1);
+	#else
+		if(path.StartsWith(".\\"))
+			path.Remove(".\\", 0, 1);	
+
+		if(path.StartsWith("\\"))
+			path.Remove("\\", 0, 1);
+	#endif
+	
+	while(path.Replace(PATH_SEP_STRING PATH_SEP_STRING, PATH_SEP_STRING))
+	{}
+
+	path = File::PrependPathSep(path);
+
+	obj.file.relPath = path;
+	obj.file.ctime = obj.createdTime;
+	obj.file.mtime = obj.modifiedTime;
+	obj.watermark = cloudObjInfoObj.GetOpt<uint64_t>("watermark", 
+		cloudObjInfoObj.GetOpt<uint64_t>("list_watermark", 0));
+
+	obj.flags = eventFlags;
+
+	auto action = cloudObjInfoObj.GetOpt<std::string>("action", "create");
+
+	if(!(type == "file" || type == "dir" || type == "share" || type == "company"))
+		return CloudObj();
+
+	if(action == "create")
+	{
+		if(type == "share")
+			obj.type = FILE_SYNC_EVENT_ADD_SHARE;
+		else if(type == "company")
+			obj.type = FILE_SYNC_EVENT_ADD_COMPANY;
+		else
+			obj.type = FILE_SYNC_EVENT_ADD;
+	}
+	else if(action == "remove")
+	{
+		if(type == "share")
+			obj.type = FILE_SYNC_EVENT_REMOVE_SHARE;
+		else if(type == "company")
+			obj.type = FILE_SYNC_EVENT_REMOVE_COMPANY;
+		else
+			obj.type = FILE_SYNC_EVENT_REMOVE;
+	}
+	else if(action == "modify")
+		obj.type = FILE_SYNC_EVENT_MODIFY;
+	else if(action == "rename")
+	{
+		if(type == "share")
+			type = "dir";
+
+		auto newPath = cloudObjInfoObj.Get<std::string>("new_path");
+
+	#if defined(BRTBUILD_WINDOWS)
+		// Ignore cloudObj with backslashes in it
+		if(newPath.Contains("\\"))
+		{
+			BRTLOG_NT(CRITICAL, "Ignoring path " << newPath);
+			return CloudObj();
+		}
+	#endif
+
+		obj.type = FILE_SYNC_EVENT_RENAME;
+		obj.newRelPath = File::ConvertToOsPathSep(newPath);
+
+		// Remove the leading sploog i sometimes get
+		#ifdef BRTBUILD_UNIX
+			obj.newRelPath.Remove("./", 0, 1);	
+			obj.newRelPath.Remove("//", 0, 1);	
+		#else
+			obj.newRelPath.Remove(".\\", 0, 1);	
+			obj.newRelPath.Remove("\\", 0, 1);
+		#endif
+
+		while(obj.newRelPath.Replace(PATH_SEP_STRING PATH_SEP_STRING, PATH_SEP_STRING))
+		{}
+
+		obj.newRelPath = File::PrependPathSep(obj.newRelPath);
+
+		if(obj.newRelPath == obj.file.relPath)
+		{
+			BRTLOG_NT(CRITICAL, "Skipping redundant rename " << obj.newRelPath);
+			return CloudObj();
+		}
+
+		BRTLOG_NT(CSMD, "Instantiated rename " << obj.file.relPath << "=>" << obj.newRelPath);
+	}
+	else if(action == "terminate")
+		obj.type = FILE_SYNC_EVENT_TERMINATE_COMPANY;
+	else
+	{
+		BRTLOG_NT(CRITICAL, "Unexpected action type " << action);
+		return CloudObj();
+	}
+
+	if(type == "dir" || type == "share" || type == "company")
+		obj.file.attributes = BRTFILE_AT_DIRECTORY;
+
+	if(type == "share")
+	{
+		obj.newShareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
+		obj.ownerId = cloudObjInfoObj.GetOpt<uint64_t>("share_owner", 0);
+	}
+	else if(type == "company")
+	{
+		// A company may also be a share
+		obj.newShareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
+		obj.ownerId = cloudObjInfoObj.GetOpt<uint64_t>("share_owner", 0);
+
+		// We must have the company cloudObj for a company-add event
+		auto companyPtr = cloudObjInfoObj.GetOpt<JSON::ValuePtr>("company", JSON::ValuePtr());
+		if(companyPtr && companyPtr->IsObject())
+		{
+			auto &companyObj = companyPtr->AsObject();
+			obj.companyId = companyObj.GetOpt<uint64_t>("company_id", 0);
+			obj.companyName = companyObj.GetOpt<std::string>("company_name", "");
+			auto userRoleString = companyObj.GetOpt<std::string>("user_role", "");
+
+			if(userRoleString == "member")
+				obj.companyUserRole = CloudSync::COMPANY_ROLE_MEMBER;
+			else if(userRoleString == "admin")
+				obj.companyUserRole = COMPANY_ROLE_ADMINISTRATOR;
+			else
+				obj.companyUserRole = COMPANY_ROLE_NONE;
+
+			obj.companyIcon = companyObj.GetOpt<Memory::YDataPtr>("icon_data", Memory::YDataPtr("null icon"));
+		}
+		else
+			return CloudObj();
+	}
+	else if(type == "file")
+	{
+		if(includeParts)
+		{
+			obj.file.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
+			
+			if(cloudObjInfoObj.Has("parts"))
+			{
+				auto partsArray = cloudObjInfoObj.Get<JSON::YArray>("parts");
+				foreach(auto &partInfo, partsArray)
+				{
+					PartInfo part;
+
+					auto partInfoObj = partInfo->AsObject();
+
+					part.offset = partInfoObj.Get<uint64_t>("offset");
+					part.size = partInfoObj.Get<uint32_t>("size");
+					part.fingerprint = partInfoObj.Get<std::string>("fingerprint");
+
+					obj.parts.push_back(part);
+				}
+			}
+		}
+	}
+
+	return obj;
+}
+
 std::string CloudApi::EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request)
 {
 	JSON::JSONRPC requestRpc;
@@ -254,20 +485,20 @@ JSON::ValuePtr CloudApi::ProcessRequest(const std::string &command, std::map<std
 	return responseRpc.result;
 }
 
-void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &authToken)
+void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method)
 {
 	headerFields["X-Client-Version"] = m_config.clientVersion;
 	headerFields["X-Client-Machine-Id"] = m_config.hostUuid;
 	headerFields["X-Client-Machine-Name"] = m_config.hostName;
 	headerFields["X-Client-Machine-User"] = m_config.sessionUser;
 
-	if(!authToken.empty())
-		headerFields["X-Authorization"] = authToken;
-	else if(!m_config.authToken.empty())
-		headerFields["X-Authorization"] = m_config.authToken;
+	// Do oauth
+	OAuth::Client oauth(&m_oauthConsumer, &m_oauthToken);
+	headerFields["Authorization"] = SplitString(oauth.getFormattedHttpHeader(OAuth::Http::Post,
+		 m_config.address + "/" + method), ": ")[1];
 
 	headerFields["X-Api-Version"] = m_config.cloudApiVersion;
-	headerFields["X-Client-Type"] = PlatformName;
+	headerFields["X-Client-Type"] = m_config.clientType;
 	headerFields["X-Client-Time"] = std::to_string(std::chrono::system_clock::now().time_since_epoch().count() *
 		 std::chrono::system_clock::period::num / std::chrono::system_clock::period::den);
 }
