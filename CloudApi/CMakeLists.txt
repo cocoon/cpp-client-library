@@ -1,3 +1,4 @@
-find_package(CURL REQUIRED)
-add_library(CloudApi STATIC CloudApi.h CloudApi.cpp ../Common.h)
-target_link_libraries(CloudApi JSON U8)
+FIND_PACKAGE(CURL REQUIRED)
+ADD_LIBRARY(CloudApi STATIC CloudApi.h CloudApi.cpp ../Common.h)
+TARGET_LINK_LIBRARIES(CloudApi JSON U8)
+TARGET_LINK_LIBRARIES(CloudApi oauthcpp)

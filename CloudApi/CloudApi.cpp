@@ -123,6 +123,8 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
 		curlList = curl_slist_append(curlList, (iter->first + std::string(": ") + iter->second).c_str());
+
+	std::cout << "Posting to url " << completeUrl << std::endl;
 	
 	auto callbackData = std::make_pair(this, &response);
 	curl_easy_setopt(m_curl, CURLOPT_URL, completeUrl.c_str());
@@ -130,6 +132,8 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, &callbackData);
 	curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, [](char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info)->size_t
 		{
+			std::cout << "Writing data " << std::endl;
+
 			std::vector<char> buf;
 			buf.reserve(size * nmemb + 1);
 
@@ -159,6 +163,7 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	curl_easy_setopt(m_curl, CURLOPT_HEADERFUNCTION, 
 		[](void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info)
 		{
+			std::cout << "Writing headers " << std::endl;
 			auto headerLine = reinterpret_cast<char *>(ptr);
 			auto keys = SplitString(headerLine, ':');
 			keys[0].erase(std::remove_if(keys[0].begin(), keys[0].end(), ::isspace), keys[0].end());

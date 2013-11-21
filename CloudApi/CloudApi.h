@@ -37,8 +37,11 @@ public:
 		// Name of the machine we are running on
 		std::string hostName;
 
-		// Auth token (If you know ahead of time, bypass login)
-		std::string authToken;
+		// OAuth tokens
+		std::string consumerKey, consumerSecret;
+		std::string accessToken, accessTokenSecret;
+
+		// This describes the type of system using this api
 		std::string clientType = PlatformName;
 
 		// Address to connect to
@@ -112,8 +115,6 @@ public:
 	CloudApi(const Config &param);
 	~CloudApi();
 
-	UserInfo Login(const std::string &user, const std::string &password);
-	UserInfo Authenticate(const std::string &authtoken);
 	void SendNeededParts(const std::vector<PartInfo> &parts);
 	void CreateFile(const std::string &path, const std::vector<PartInfo> &parts);
 
