@@ -30,7 +30,7 @@ int main(int argc, const char *argv[])
 
 			config.consumerKey = vm["oauth-consumer-key"].as<std::string>();
 			config.consumerSecret = vm["oauth-consumer-secret"].as<std::string>();
-			config.accessTokenSecret = vm["oauth-access-token"].as<std::vector<std::string>>();
+			config.accessTokenSecret = vm["oauth-access-token"].as<std::string>();
 			config.accessTokenSecret = vm["oauth-access-token-secret"].as<std::string>();
 		}
 		catch(std::exception &e)
@@ -45,7 +45,13 @@ int main(int argc, const char *argv[])
 		// Determine if they want to send, or list
 		if(vm.count("list"))
 		{
-			cloudApi.List(vm["list"].as<std::string>()[0]);
+			CloudApi::ListConfig listConfig;
+			listConfig.path = vm["list"].as<std::string>();
+
+			auto result = cloudApi.ListPath(listConfig);
+
+			for(auto &obj : result.children)
+				std::cout << "  " << obj.path << std::endl;
 		}
 		else if(vm.count("send"))
 		{

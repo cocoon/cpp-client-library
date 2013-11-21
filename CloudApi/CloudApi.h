@@ -56,7 +56,7 @@ public:
 	struct PartInfo
 	{
 		// A has is comprised of an md5 + sha1
-		std::string hash;
+		std::string fingerprint;
 
 		// Data of part (api dependent)
 		std::vector<unsigned char> data;
@@ -124,7 +124,11 @@ public:
 		std::string path;
 		std::string type;
 		uint64_t childCount = 0;
+		uint64_t id = 0;
+		uint64_t removedTime = 0, createdTime = 0, modifiedTime = 0;
+		uint64_t size = 0;
 		std::vector<PartInfo> parts;
+		JSON::ValuePtr attributes;
 
 		explicit operator bool () const { return !path.empty(); }
 	};
@@ -138,9 +142,11 @@ public:
 
 	struct ListConfig 
 	{
+		std::string path;
 		uint64_t index = 0;
 		bool includeParts = false;
 		bool recurse = false;
+		bool includeChildCounts = false;
 		uint32_t maxCount = 50;
 		uint32_t maxSize = 1024 * 1024 * 5;
 		bool groupByDir = false;

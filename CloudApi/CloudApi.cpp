@@ -168,36 +168,31 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	ListResult result;
 	bool firstTime = !config.index;
 
-	BRTLOG(CSM_CLOUD, "Listing path " << File::ConvertToOsPathSep(File::RemovePathSep(config.relPath), "/"));
-
-	if(Thread::YThread::IsThreadTerminated())
-		BRTERROR(CCODE, CSM_EXC, BRTERR_OPERATOR_CANCEL);
-
 	JSON::Object main_request;
-	main_request.Set<std::string>("path", File::ConvertToOsPathSep(File::RemovePathSep(config.relPath), "/"));
+	main_request.Set<std::string>("path", config.path);
 
 	if(config.maxSize)
-		main_request.Set<std::string>("max_size", Util::NumberToString<uint64_t>(config.maxSize));
+		main_request.Set<std::string>("max_size", std::to_string(config.maxSize));
 	if(config.maxCount)
-		main_request.Set<std::string>("max_items", Util::NumberToString<uint64_t>(config.maxCount));
+		main_request.Set<std::string>("max_items", std::to_string(config.maxCount));
 
-	main_request.Set<std::string>("list_watermark", Util::NumberToString<uint64_t>(config.index));
-	main_request.Set<std::string>("include_total_items", Util::NumberToString<uint32_t>(0));
-	main_request.Set<std::string>("recurse", Util::NumberToString<uint32_t>(config.recurse));
-	main_request.Set<std::string>("include_parts", Util::NumberToString<uint32_t>(config.includeParts));
-	main_request.Set<std::string>("include_child_counts", Util::NumberToString<uint32_t>(config.includeChildCounts));
-	main_request.Set<std::string>("include_attributes", Util::NumberToString<uint32_t>(1));
+	main_request.Set<std::string>("list_watermark", std::to_string(config.index));
+	main_request.Set<std::string>("include_total_items", std::to_string(0));
+	main_request.Set<std::string>("recurse", std::to_string(config.recurse));
+	main_request.Set<std::string>("include_parts", std::to_string(config.includeParts));
+	main_request.Set<std::string>("include_child_counts", std::to_string(config.includeChildCounts));
+	main_request.Set<std::string>("include_attributes", std::to_string(1));
 
-	if(config.filter)
+	if(!config.filter.empty())
 		main_request.Set<std::string>("filter_name", config.filter);
 
-	if(config.groupByDir)
+	if(!config.groupByDir)
 		main_request.Set<std::string>("group_by_dir", std::to_string(config.groupByDir));
 
-	if(config.sortField)
+	if(!config.sortField.empty())
 		main_request.Set<std::string>("sort_field", config.sortField);
 
-	if(config.sortDirection)
+	if(!config.sortDirection.empty())
 		main_request.Set<std::string>("sort_direction", config.sortDirection);
 
 	auto list_result = ProcessRequest("list_objects", headerFields, main_request)->AsObject();
@@ -209,41 +204,28 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	if(!config.index)
 		config.index = config.index + 1;
 
-	if(list_result.GetType("children") == JSON::JSONType_Null)
+	if(list_result.GetType("children") == JSON::Type_Null)
 		return result;
 	auto cloudObjArray = list_result.Get<JSON::Array>("children");
 
 	// First pass include root at start
-	if(firstTime && config.includeRoot)
+	if(firstTime)
 	{
-		if(list_result.GetType("object") == JSON::JSONType_Null)
-		{
-			BRTLOG(CRITICAL, "No object field in list objects");
-			BRTERROR(CCODE, CRITICAL, CSMERR_CLOUD_RESPONSE_FAILURE);
-		}
 		auto parentInfo = list_result.Get<JSON::ValuePtr>("object");
-
-		CloudObj rootObject;
-		
 		result.root = ParseCloudObj(config.includeParts, parentInfo);
 	}
 
-	foreach(auto &cloudObjInfo, cloudObjArray)
+	for(auto &cloudObjInfo : cloudObjArray)
 	{
 		auto cloudObj = ParseCloudObj(config.includeParts, cloudObjInfo);
 		if(cloudObj)
-		{
-			if(config.includeDeleted && cloudObj->file.attributes & BRTFILE_AT_DIRECTORY)
-				cloudObj->file.childCount = 1;
-			if(config.pattern.IsEmpty() || Match::RegExp(File::GetFileFromPath(cloudObj->file.relPath), config.pattern))
-				result.children.push_back(cloudObj);
-		}
+			result.children.push_back(cloudObj);
 	}
 
 	return result;
 }
 
-CloudObj YCloudApi::ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo, uint32_t eventFlags)
+CloudApi::CloudObj CloudApi::ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo)
 {
 	auto cloudObjInfoObj = cloudObjInfo->AsObject();
 
@@ -252,194 +234,37 @@ CloudObj YCloudApi::ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloud
 	if(!cloudObjInfoObj.Has("path"))
 		return CloudObj();
 
-	std::string type = cloudObjInfoObj.GetOpt<std::string>("type", cloudObjInfoObj.GetOpt<std::string>("object_type", ""));
+	auto type = cloudObjInfoObj.GetOpt<std::string>("type", cloudObjInfoObj.GetOpt<std::string>("object_type", ""));
 	auto path = cloudObjInfoObj.Get<std::string>("path");
 
-	path = File::ConvertToOsPathSep(path);
-
-	obj.objectId = cloudObjInfoObj.GetOpt<uint64_t>("object_id", 0);
-	obj.removedTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("removed_time", 0));
-	obj.createdTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("created_time", 0));
-	obj.modifiedTime = Time::GetPosixTime(cloudObjInfoObj.GetOpt<uint64_t>("modified_time", 0));
-	obj.clientId = cloudObjInfoObj.GetOpt<uint64_t>("client_id", 0);
-	obj.shareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
-
-	obj.file.childCount = cloudObjInfoObj.GetOpt<uint32_t>("children_count", 0);
-
-	obj.file.mtime = obj.modifiedTime;
-	obj.file.ctime = obj.createdTime;
-
-	// For links
-	obj.downloadUrl = cloudObjInfoObj.GetOpt<std::string>("url", "");
-
+	obj.id = cloudObjInfoObj.GetOpt<uint64_t>("object_id", 0);
+	obj.removedTime = cloudObjInfoObj.GetOpt<uint64_t>("removed_time", 0);
+	obj.createdTime = cloudObjInfoObj.GetOpt<uint64_t>("created_time", 0);
+	obj.modifiedTime = cloudObjInfoObj.GetOpt<uint64_t>("modified_time", 0);
+	obj.childCount = cloudObjInfoObj.GetOpt<uint32_t>("children_count", 0);
 
 	// File attributes (optional)
-	if(cloudObjInfoObj.GetType("attributes") == JSON::JSONType_Object)
-	{
-		try
-		{
-			obj.fileMetadata = cloudObjInfoObj.Get<JSON::ValuePtr>("attributes");
-		}
-		catch(YError &error)
-		{
-			BRTLOG_NT(CSM, "Failed to parse cloudObj " << error);
-		}
-	}
+	if(cloudObjInfoObj.GetType("attributes") == JSON::Type_Object)
+		obj.attributes = cloudObjInfoObj.Get<JSON::ValuePtr>("attributes");
 
-	// File link info (optional)
-	if(cloudObjInfoObj.GetType("links") == JSON::JSONType_Array)
-	{
-		foreach(auto &linkValue, cloudObjInfoObj.Get<JSON::ValuePtr>("links")->AsArray())
-			obj.links.push_back(ParseLinkInfo(linkValue));
-	}
-
-	// Remove the leading sploog i sometimes get
-	#ifdef BRTBUILD_UNIX
-		if(path.StartsWith("./"))
-			path.Remove("./", 0, 1);
-
-		if(path.StartsWith("//"))
-			path.Remove("//", 0, 1);
-	#else
-		if(path.StartsWith(".\\"))
-			path.Remove(".\\", 0, 1);	
-
-		if(path.StartsWith("\\"))
-			path.Remove("\\", 0, 1);
-	#endif
-	
-	while(path.Replace(PATH_SEP_STRING PATH_SEP_STRING, PATH_SEP_STRING))
-	{}
-
-	path = File::PrependPathSep(path);
-
-	obj.file.relPath = path;
-	obj.file.ctime = obj.createdTime;
-	obj.file.mtime = obj.modifiedTime;
-	obj.watermark = cloudObjInfoObj.GetOpt<uint64_t>("watermark", 
-		cloudObjInfoObj.GetOpt<uint64_t>("list_watermark", 0));
-
-	obj.flags = eventFlags;
+	obj.path = path;
 
 	auto action = cloudObjInfoObj.GetOpt<std::string>("action", "create");
 
 	if(!(type == "file" || type == "dir" || type == "share" || type == "company"))
 		return CloudObj();
+	obj.type = type;
 
-	if(action == "create")
-	{
-		if(type == "share")
-			obj.type = FILE_SYNC_EVENT_ADD_SHARE;
-		else if(type == "company")
-			obj.type = FILE_SYNC_EVENT_ADD_COMPANY;
-		else
-			obj.type = FILE_SYNC_EVENT_ADD;
-	}
-	else if(action == "remove")
-	{
-		if(type == "share")
-			obj.type = FILE_SYNC_EVENT_REMOVE_SHARE;
-		else if(type == "company")
-			obj.type = FILE_SYNC_EVENT_REMOVE_COMPANY;
-		else
-			obj.type = FILE_SYNC_EVENT_REMOVE;
-	}
-	else if(action == "modify")
-		obj.type = FILE_SYNC_EVENT_MODIFY;
-	else if(action == "rename")
-	{
-		if(type == "share")
-			type = "dir";
-
-		auto newPath = cloudObjInfoObj.Get<std::string>("new_path");
-
-	#if defined(BRTBUILD_WINDOWS)
-		// Ignore cloudObj with backslashes in it
-		if(newPath.Contains("\\"))
-		{
-			BRTLOG_NT(CRITICAL, "Ignoring path " << newPath);
-			return CloudObj();
-		}
-	#endif
-
-		obj.type = FILE_SYNC_EVENT_RENAME;
-		obj.newRelPath = File::ConvertToOsPathSep(newPath);
-
-		// Remove the leading sploog i sometimes get
-		#ifdef BRTBUILD_UNIX
-			obj.newRelPath.Remove("./", 0, 1);	
-			obj.newRelPath.Remove("//", 0, 1);	
-		#else
-			obj.newRelPath.Remove(".\\", 0, 1);	
-			obj.newRelPath.Remove("\\", 0, 1);
-		#endif
-
-		while(obj.newRelPath.Replace(PATH_SEP_STRING PATH_SEP_STRING, PATH_SEP_STRING))
-		{}
-
-		obj.newRelPath = File::PrependPathSep(obj.newRelPath);
-
-		if(obj.newRelPath == obj.file.relPath)
-		{
-			BRTLOG_NT(CRITICAL, "Skipping redundant rename " << obj.newRelPath);
-			return CloudObj();
-		}
-
-		BRTLOG_NT(CSMD, "Instantiated rename " << obj.file.relPath << "=>" << obj.newRelPath);
-	}
-	else if(action == "terminate")
-		obj.type = FILE_SYNC_EVENT_TERMINATE_COMPANY;
-	else
-	{
-		BRTLOG_NT(CRITICAL, "Unexpected action type " << action);
-		return CloudObj();
-	}
-
-	if(type == "dir" || type == "share" || type == "company")
-		obj.file.attributes = BRTFILE_AT_DIRECTORY;
-
-	if(type == "share")
-	{
-		obj.newShareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
-		obj.ownerId = cloudObjInfoObj.GetOpt<uint64_t>("share_owner", 0);
-	}
-	else if(type == "company")
-	{
-		// A company may also be a share
-		obj.newShareId = cloudObjInfoObj.GetOpt<uint64_t>("share_id", 0);
-		obj.ownerId = cloudObjInfoObj.GetOpt<uint64_t>("share_owner", 0);
-
-		// We must have the company cloudObj for a company-add event
-		auto companyPtr = cloudObjInfoObj.GetOpt<JSON::ValuePtr>("company", JSON::ValuePtr());
-		if(companyPtr && companyPtr->IsObject())
-		{
-			auto &companyObj = companyPtr->AsObject();
-			obj.companyId = companyObj.GetOpt<uint64_t>("company_id", 0);
-			obj.companyName = companyObj.GetOpt<std::string>("company_name", "");
-			auto userRoleString = companyObj.GetOpt<std::string>("user_role", "");
-
-			if(userRoleString == "member")
-				obj.companyUserRole = CloudSync::COMPANY_ROLE_MEMBER;
-			else if(userRoleString == "admin")
-				obj.companyUserRole = COMPANY_ROLE_ADMINISTRATOR;
-			else
-				obj.companyUserRole = COMPANY_ROLE_NONE;
-
-			obj.companyIcon = companyObj.GetOpt<Memory::YDataPtr>("icon_data", Memory::YDataPtr("null icon"));
-		}
-		else
-			return CloudObj();
-	}
-	else if(type == "file")
+	if(type == "file")
 	{
 		if(includeParts)
 		{
-			obj.file.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
+			obj.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
 			
 			if(cloudObjInfoObj.Has("parts"))
 			{
-				auto partsArray = cloudObjInfoObj.Get<JSON::YArray>("parts");
-				foreach(auto &partInfo, partsArray)
+				auto partsArray = cloudObjInfoObj.Get<JSON::Array>("parts");
+				for(auto &partInfo : partsArray)
 				{
 					PartInfo part;
 
