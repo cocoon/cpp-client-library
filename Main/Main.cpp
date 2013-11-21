@@ -30,7 +30,7 @@ int main(int argc, const char *argv[])
 
 			config.consumerKey = vm["oauth-consumer-key"].as<std::string>();
 			config.consumerSecret = vm["oauth-consumer-secret"].as<std::string>();
-			config.accessTokenSecret = vm["oauth-access-token"].as<std::string>();
+			config.accessToken = vm["oauth-access-token"].as<std::string>();
 			config.accessTokenSecret = vm["oauth-access-token-secret"].as<std::string>();
 		}
 		catch(std::exception &e)
@@ -50,8 +50,18 @@ int main(int argc, const char *argv[])
 
 			auto result = cloudApi.ListPath(listConfig);
 
+			size_t fieldWidth = 0;
 			for(auto &obj : result.children)
-				std::cout << "  " << obj.path << std::endl;
+			{
+				if(fieldWidth < obj.path.size())
+					fieldWidth = obj.path.size();
+			}
+
+			for(auto &obj : result.children)
+			{
+				std::cout << std::setw(5) << obj.type << std::setw(10) << obj.size <<
+					std::setw(fieldWidth + 5) << obj.path << std::endl;
+			}
 		}
 		else if(vm.count("send"))
 		{

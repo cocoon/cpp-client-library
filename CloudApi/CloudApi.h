@@ -16,40 +16,17 @@ public:
 	struct Config
 	{
 		// Api version the client is adhering too (for now, always 1.0)
-		std::string cloudApiVersion;
-
-		// The client version (arbitrary)
-		std::string clientVersion;
-
-		// Name of user logged in (arbritrary)
-		std::string sessionUser;
-
-		// User id of logged in user
-		uint64_t userId;
-
-		// Logged in user email
-		std::string loggedInUser;
-
-		// Some unique value tied to the physical system 
-		// must match what was used at login, if an auth token is used
-		// to authenticate
-		std::string hostUuid;
-
-		// Name of the machine we are running on
-		std::string hostName;
+		std::string cloudApiVersion = "1.0";
 
 		// OAuth tokens
 		std::string consumerKey, consumerSecret;
 		std::string accessToken, accessTokenSecret;
 
-		// This describes the type of system using this api
-		std::string clientType = PlatformName;
-
 		// Address to connect to
-		std::string address = "http://api.copy.com";
+		std::string address = "http://api.qa.copy.com";
 
 		// Enabled to log detailed output to screen
-		bool curlDebug = true;
+		bool curlDebug = false;
 	};
 
 	// This structure decribes a chunk of data
@@ -166,6 +143,10 @@ protected:
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);
 	CloudError MapCloudError(uint32_t errorCode);
 	CloudObj ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo);
+
+	static int CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra);
+	static size_t CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info);
+	static size_t CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info);
 
 	Config m_config;
 	static std::once_flag s_hasInitializedCurl;

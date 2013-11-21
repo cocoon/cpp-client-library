@@ -55,34 +55,11 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
 		curlList = curl_slist_append(curlList, (iter->first + std::string(": ") + iter->second).c_str());
 
-	std::cout << "Posting to url " << completeUrl << std::endl;
-	
 	auto callbackData = std::make_pair(this, &response);
 	curl_easy_setopt(m_curl, CURLOPT_URL, completeUrl.c_str());
 	curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, curlList);
 	curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, &callbackData);
-	curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, [](char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info)->size_t
-		{
-			std::cout << "Writing data " << std::endl;
-
-			std::vector<char> buf;
-			buf.reserve(size * nmemb + 1);
-
-			auto pbuf = &buf[0];
-
-			memset(&buf[0], '\0', size * nmemb + 1);
-			size_t i = 0;
-			for(;  i < nmemb; i++)
-			{
-				strncpy(pbuf, static_cast<char *>(ptr), size);
-				pbuf += size;
-				ptr += size;
-			}
-
-			info->second->append(&buf[0]);
-			return size * nmemb;
-		});
-
+	curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, CurlWriteDataCallback);
 	curl_easy_setopt(m_curl, CURLOPT_POST, 1);
 	curl_easy_setopt(m_curl, CURLOPT_HEADER, 0);
 	curl_easy_setopt(m_curl, CURLOPT_POSTFIELDSIZE, data.size()); 
@@ -91,17 +68,7 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	headerFields.clear();
 	auto callbackInfo = std::make_pair(this, &headerFields);
 	curl_easy_setopt(m_curl, CURLOPT_WRITEHEADER, &callbackInfo);
-	curl_easy_setopt(m_curl, CURLOPT_HEADERFUNCTION, 
-		[](void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info)
-		{
-			std::cout << "Writing headers " << std::endl;
-			auto headerLine = reinterpret_cast<char *>(ptr);
-			auto keys = SplitString(headerLine, ":");
-			keys[0].erase(std::remove_if(keys[0].begin(), keys[0].end(), ::isspace), keys[0].end());
-			keys[1].erase(std::remove_if(keys[1].begin(), keys[1].end(), ::isspace), keys[1].end());
-			info->second->operator[](keys[0]) = keys[1];
-			return size * nmemb;
-		});
+	curl_easy_setopt(m_curl, CURLOPT_HEADERFUNCTION, CurlWriteHeaderCallback);
 
 	try
 	{
@@ -118,32 +85,65 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	return response;
 }
 
+size_t CloudApi::CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info)
+{
+	std::vector<char> buf;
+	buf.reserve(size * nmemb + 1);
+
+	auto pbuf = &buf[0];
+
+	memset(&buf[0], '\0', size * nmemb + 1);
+	size_t i = 0;
+	for(;  i < nmemb; i++)
+	{
+		strncpy(pbuf, static_cast<char *>(ptr), size);
+		pbuf += size;
+		ptr += size;
+	}
+
+	info->second->append(&buf[0]);
+	return size * nmemb;
+}
+
+size_t CloudApi::CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info)
+{
+	auto headerLine = reinterpret_cast<char *>(ptr);
+	auto keys = SplitString(headerLine, ":");
+	keys.first.erase(std::remove_if(keys.first.begin(), keys.first.end(), ::isspace), keys.first.end());
+	keys.second.erase(std::remove_if(keys.second.begin(), keys.second.end(), ::isspace), keys.second.end());
+	info->second->operator[](keys.first) = keys.second;
+	return size * nmemb;
+}
+
+int CloudApi::CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra)
+{
+	if(!size)
+		return 0;
+
+	switch(infoType)
+	{
+		case CURLINFO_TEXT:
+			std::cout << std::string(data, size);
+			break;
+
+		case CURLINFO_HEADER_IN:
+			std::cout << "HEADER <- " << std::string(data, size);
+			break;
+
+		case CURLINFO_HEADER_OUT:
+			std::cout << "HEADER -> " << std::string(data, size);
+			break;
+	}
+
+	return 0;
+}
+
 void CloudApi::Perform()
 {
 	if(m_config.curlDebug)
 	{
 		curl_easy_setopt(m_curl, CURLOPT_VERBOSE, 1);
-		curl_easy_setopt(m_curl, CURLOPT_DEBUGFUNCTION, 
-			[](CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra)->int
-			{
-				if(!size)
-					return 0;
-
-				switch(infoType)
-				{
-					case CURLINFO_TEXT:
-						std::cout << std::string(data, size) << std::endl;
-						break;
-					case CURLINFO_HEADER_IN:
-						std::cout << "HEADER <- " << std::string(data, size) << std::endl;
-						break;
-					case CURLINFO_HEADER_OUT:
-						std::cout << "HEADER -> " << std::string(data, size) << std::endl;
-						break;
-				}
-
-				return 0;
-			});
+		curl_easy_setopt(m_curl, CURLOPT_DEBUGFUNCTION, CurlDebugCallback);
 	}
 
 	curl_easy_setopt(m_curl, CURLOPT_ENCODING, "gzip,deflate");
@@ -257,10 +257,10 @@ CloudApi::CloudObj CloudApi::ParseCloudObj(bool includeParts, const JSON::ValueP
 
 	if(type == "file")
 	{
+		obj.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
+			
 		if(includeParts)
 		{
-			obj.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
-			
 			if(cloudObjInfoObj.Has("parts"))
 			{
 				auto partsArray = cloudObjInfoObj.Get<JSON::Array>("parts");
@@ -312,18 +312,17 @@ JSON::ValuePtr CloudApi::ProcessRequest(const std::string &command, std::map<std
 
 void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method)
 {
-	headerFields["X-Client-Version"] = m_config.clientVersion;
-	headerFields["X-Client-Machine-Id"] = m_config.hostUuid;
-	headerFields["X-Client-Machine-Name"] = m_config.hostName;
-	headerFields["X-Client-Machine-User"] = m_config.sessionUser;
-
 	// Do oauth
 	OAuth::Client oauth(&m_oauthConsumer, &m_oauthToken);
 	headerFields["Authorization"] = SplitString(oauth.getFormattedHttpHeader(OAuth::Http::Post,
-		 m_config.address + "/" + method), ": ")[1];
+		 m_config.address + "/" + method), ": ").second;
+
+	// Required to bypass oath binary payloads
+	if(method == "has_object_parts" || method == "send_object_parts" || method == "get_object_parts")
+		headerFields["Content-Type"] = "application/octet-stream";
 
 	headerFields["X-Api-Version"] = m_config.cloudApiVersion;
-	headerFields["X-Client-Type"] = m_config.clientType;
+	headerFields["X-Client-Type"] = "api";
 	headerFields["X-Client-Time"] = std::to_string(std::chrono::system_clock::now().time_since_epoch().count() *
 		 std::chrono::system_clock::period::num / std::chrono::system_clock::period::den);
 }

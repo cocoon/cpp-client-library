@@ -14,6 +14,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <iomanip>
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \
@@ -94,43 +95,19 @@
 
 namespace CopyExample
 {
-#if defined(_WIN32) || defined(_WIN64)
-	static std::string PlatformName = "win";
-#elif defined(__APPLE__)
-	static std::string PlatformName = "mac";
-#elif defined(__linux)
-	static std::string PlatformName = "lin";
-#else
-	#error "Unknown platform type"
-#endif
-}
-
-namespace CopyExample
-{
-	inline std::vector<std::string> &SplitString(const std::string &s, const std::string &delim, std::vector<std::string> &elems) 
+	inline std::pair<std::string, std::string> SplitString(std::string s, const std::string &delim) 
 	{
-		std::stringstream ss(s);
-		std::string item;
+		auto position = s.find(delim);
+		if(position == std::string::npos)
+			return std::make_pair(s, "");
 
-		bool result = false;
+		std::pair<std::string, std::string> result;
 
-		for(auto &_delim : delim)
-		{
-			if(_delim)
-				result = std::getline(ss, item, _delim);
-		}
+		result.second = s.substr(position + delim.size());
+		s.resize(s.size() - position + delim.size());
+		result.first = s;
 
-		if(result)
-			elems.push_back(item);
-
-		return elems;
-	}
-
-	inline std::vector<std::string> SplitString(const std::string &s, const std::string &delim) 
-	{
-		std::vector<std::string> elems;
-		SplitString(s, delim, elems);
-		return elems;
+		return result;
 	}
 }
 
