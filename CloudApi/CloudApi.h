@@ -137,8 +137,8 @@ public:
 
 protected:
 	void Perform();
-	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data);
-	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &authToken = "");
+	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &endpoint = "jsonrpc");
+	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &endpoint = "jsonrpc");
 	std::string EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request);
 	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request = JSON::Object());
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);

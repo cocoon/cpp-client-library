@@ -62,13 +62,45 @@ void CloudApi::SendNeededParts(const std::vector<PartInfo> &parts)
  */
 void CloudApi::CreateFile(const std::string &cloudPath, const std::vector<PartInfo> &parts)
 {
+	std::map<std::string, std::string> headerFields;
+	SetCommonHeaderFields(headerFields);
+
+	JSON::Array items;
+	JSON::Object item, main_request;
+	item.Set<std::string>("action", "create");
+	item.Set<std::string>("object_type", "file");
+	item.Set<std::string>("path", cloudPath);
+
+	// Sum up the size of the parts
+	uint64_t size = 0;
+	for(auto &part : parts)
+		size += part.size;
+
+	item.Set<std::string>("size", std::to_string(size));
+
+	JSON::Array part_items;
+	for(auto &part : parts)
+	{
+		JSON::Object partObj;
+		partObj.Set<std::string>("fingerprint", part.fingerprint);
+		partObj.Set<std::string>("offset", std::to_string(part.offset));
+		partObj.Set<std::string>("size", std::to_string(part.size));
+		part_items.push_back(JSON::Value::Create(partObj));
+	}
+	item.Set<JSON::Array>("parts", part_items);
+
+	items.push_back(JSON::Value::Create(item));
+
+	main_request.Set<JSON::Array>("meta", items);
+	
+	ProcessRequest("update_objects", headerFields, main_request);
 }
 
-std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, const std::string &data)
+std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &endpoint)
 {
 	std::string response;
 
-	auto completeUrl = m_config.address + "/jsonrpc";
+	auto completeUrl = m_config.address + "/" + endpoint;
 
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
@@ -183,7 +215,7 @@ void CloudApi::Perform()
 CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 {
 	std::map<std::string, std::string> headerFields;
-	SetCommonHeaderFields(headerFields, "jsonrpc");
+	SetCommonHeaderFields(headerFields);
 	ListResult result;
 	bool firstTime = !config.index;
 
@@ -328,15 +360,15 @@ JSON::ValuePtr CloudApi::ProcessRequest(const std::string &command, std::map<std
 	return responseRpc.result;
 }
 
-void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method)
+void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &endpoint)
 {
 	// Do oauth
 	OAuth::Client oauth(&m_oauthConsumer, &m_oauthToken);
 	headerFields["Authorization"] = SplitString(oauth.getFormattedHttpHeader(OAuth::Http::Post,
-		 m_config.address + "/" + method), ": ").second;
+		 m_config.address + "/" + endpoint), ": ").second;
 
 	// Required to bypass oath binary payloads
-	if(method == "has_object_parts" || method == "send_object_parts" || method == "get_object_parts")
+	if(endpoint == "has_object_parts" || endpoint == "send_object_parts" || endpoint == "get_object_parts")
 		headerFields["Content-Type"] = "application/octet-stream";
 
 	headerFields["X-Api-Version"] = m_config.cloudApiVersion;
