@@ -94,6 +94,8 @@ public:
 	~CloudApi();
 
 	void SendNeededParts(const std::vector<PartInfo> &parts);
+	std::vector<PartInfo> HasParts(std::vector<PartInfo> parts);
+	void GetParts(std::vector<PartInfo> &parts);
 	void CreateFile(const std::string &path, const std::vector<PartInfo> &parts);
 
 	struct CloudObj

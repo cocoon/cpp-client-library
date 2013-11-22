@@ -32,10 +32,29 @@ CloudApi::~CloudApi()
 }
 
 /**
+ * GetParts - This function fetches parts from the cloud
+ */
+void CloudApi::GetParts(std::vector<PartInfo> &parts)
+{
+	// @@ TODO
+}
+
+/**
+ * HasParts - This function will ask the cloud if it has the requested parts, and return
+ * a vector of parts that the cloud does not have
+ */
+std::vector<CloudApi::PartInfo> CloudApi::HasParts(std::vector<PartInfo> parts)
+{
+	// @@ TODO
+	return parts;
+}
+
+/**
  * SendNeededParts - This function sends all the parts in the vector, that the cloud doesn't have
  */
 void CloudApi::SendNeededParts(const std::vector<PartInfo> &parts)
 {
+	// @@ TODO
 }
 
 /**
