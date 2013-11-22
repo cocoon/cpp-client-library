@@ -102,6 +102,9 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 
 	auto completeUrl = m_config.address + "/" + method;
 
+	if(m_config.debugCallback)
+		m_config.debugCallback(std::string("Requesting ") + data);
+
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
 		curlList = curl_slist_append(curlList, (iter->first + std::string(": ") + iter->second).c_str());
@@ -130,6 +133,9 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 		curl_slist_free_all(curlList);
 		throw;
 	}
+
+	if(m_config.debugCallback)
+		m_config.debugCallback(std::string("Reply " ) + response);
 
 	curl_slist_free_all(curlList);
 
@@ -166,34 +172,39 @@ size_t CloudApi::CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, s
 	return size * nmemb;
 }
 
-int CloudApi::CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra)
+int CloudApi::CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, CloudApi *thisClass)
 {
 	if(!size)
 		return 0;
 
+	std::ostringstream ss;
+
 	switch(infoType)
 	{
-		case CURLINFO_TEXT:
-			std::cout << std::string(data, size);
-			break;
-
 		case CURLINFO_HEADER_IN:
-			std::cout << "HEADER <- " << std::string(data, size);
+			ss << "HEADER <- " << std::string(data, size);
 			break;
 
 		case CURLINFO_HEADER_OUT:
-			std::cout << "HEADER -> " << std::string(data, size);
+			ss << "HEADER -> " << std::string(data, size);
+			break;
+
+		case CURLINFO_TEXT:
+			ss << std::string(data, size);
 			break;
 	}
+
+	thisClass->m_config.debugCallback(ss.str());
 
 	return 0;
 }
 
 void CloudApi::Perform()
 {
-	if(m_config.curlDebug)
+	if(m_config.debugCallback)
 	{
 		curl_easy_setopt(m_curl, CURLOPT_VERBOSE, 1);
+		curl_easy_setopt(m_curl, CURLOPT_DEBUGDATA, this);
 		curl_easy_setopt(m_curl, CURLOPT_DEBUGFUNCTION, CurlDebugCallback);
 	}
 
@@ -262,12 +273,12 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	if(firstTime)
 	{
 		auto parentInfo = list_result.Get<JSON::ValuePtr>("object");
-		result.root = ParseCloudObj(config.includeParts, parentInfo);
+		result.root = ParseCloudObj(parentInfo);
 	}
 
 	for(auto &cloudObjInfo : cloudObjArray)
 	{
-		auto cloudObj = ParseCloudObj(config.includeParts, cloudObjInfo);
+		auto cloudObj = ParseCloudObj(cloudObjInfo);
 		if(cloudObj)
 			result.children.push_back(cloudObj);
 	}
@@ -275,7 +286,7 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	return result;
 }
 
-CloudApi::CloudObj CloudApi::ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo)
+CloudApi::CloudObj CloudApi::ParseCloudObj(const JSON::ValuePtr &cloudObjInfo)
 {
 	auto cloudObjInfoObj = cloudObjInfo->AsObject();
 
@@ -309,23 +320,20 @@ CloudApi::CloudObj CloudApi::ParseCloudObj(bool includeParts, const JSON::ValueP
 	{
 		obj.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
 			
-		if(includeParts)
+		if(cloudObjInfoObj.Has("parts"))
 		{
-			if(cloudObjInfoObj.Has("parts"))
+			auto partsArray = cloudObjInfoObj.Get<JSON::Array>("parts");
+			for(auto &partInfo : partsArray)
 			{
-				auto partsArray = cloudObjInfoObj.Get<JSON::Array>("parts");
-				for(auto &partInfo : partsArray)
-				{
-					PartInfo part;
+				PartInfo part;
 
-					auto partInfoObj = partInfo->AsObject();
+				auto partInfoObj = partInfo->AsObject();
 
-					part.offset = partInfoObj.Get<uint64_t>("offset");
-					part.size = partInfoObj.Get<uint32_t>("size");
-					part.fingerprint = partInfoObj.Get<std::string>("fingerprint");
+				part.offset = partInfoObj.Get<uint64_t>("offset");
+				part.size = partInfoObj.Get<uint32_t>("size");
+				part.fingerprint = partInfoObj.Get<std::string>("fingerprint");
 
-					obj.parts.push_back(part);
-				}
+				obj.parts.push_back(part);
 			}
 		}
 	}
@@ -573,7 +581,6 @@ uint32_t CloudApi::BinaryParsePartsReply(std::vector<uint8_t> &replyData,
 
 	return partCount;
 }
-
 
 std::vector<uint8_t> CloudApi::ProcessBinaryPartsRequest(const std::string &method,
 	 const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode)

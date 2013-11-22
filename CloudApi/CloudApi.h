@@ -19,7 +19,7 @@ public:
 		std::string consumerKey, consumerSecret;
 		std::string accessToken, accessTokenSecret;
 		std::string address = "http://api.qa.copy.com";
-		bool curlDebug = false;
+		std::function<void(const std::string &)> debugCallback;
 	};
 
 	// This structure decribes a chunk of data
@@ -131,9 +131,9 @@ protected:
 	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request = JSON::Object());
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);
 	CloudError MapCloudError(uint32_t errorCode);
-	CloudObj ParseCloudObj(bool includeParts, const JSON::ValuePtr &cloudObjInfo);
+	CloudObj ParseCloudObj(const JSON::ValuePtr &cloudObjInfo);
 
-	static int CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra);
+	static int CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, CloudApi *extra);
 	static size_t CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info);
 	static size_t CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info);
 

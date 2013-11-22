@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <cstddef>
 #include <assert.h>
+#include <fstream>
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \

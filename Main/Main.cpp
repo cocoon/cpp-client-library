@@ -28,12 +28,86 @@ static void DoList(CloudApi &cloudApi, program_options::variables_map &vm)
 
 static void DoGet(CloudApi &cloudApi, program_options::variables_map &vm)
 {
-	// @@ TODO
+	auto cloudPath = vm["get"].as<std::vector<std::string>>()[0];
+	auto filePath = vm["get"].as<std::vector<std::string>>()[1];
+
+	std::cout << "Downloading cloud path" << cloudPath << std::endl;
+
+	// List the file to get its part list
+	CloudApi::ListConfig config;
+	config.path = cloudPath;
+	config.includeParts = true;
+
+	auto result = cloudApi.ListPath(config);
+
+	for(auto &part : result.root.parts)
+		std::cout << "Detected part " << part.fingerprint << " for file" << std::endl;
 }
 
 static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 {
-	// @@ TODO
+	std::ifstream file;
+	auto filePath = vm["send"].as<std::vector<std::string>>()[0];
+	auto cloudPath = vm["send"].as<std::vector<std::string>>()[1];
+
+	std::cout << "Sending " << filePath << " to " << cloudPath << std::endl;
+
+	file.open(filePath, std::ios::binary);
+	if(!file.is_open())
+		throw std::logic_error(std::string("Failed to open ") + filePath);
+	
+	std::vector<CloudApi::PartInfo> parts;
+	std::vector<CloudApi::PartInfo> partBatch;
+
+	// This function will send up a batch of parts, move them to the pain part array,
+	// and free their data
+	auto sendPartBatch = [&]()
+		{
+			std::cout << "Sending " << partBatch.size() << " part(s)" << std::endl;
+
+			cloudApi.SendNeededParts(partBatch);
+			
+			// Clear their data and transfer back to main part bucket
+			for(auto &part : partBatch)
+			{
+				part.data.clear();
+				parts.push_back(std::move(part));
+			}
+
+			partBatch.clear();
+		};
+
+	// Read in 1MB chunks, and send the parts along the way
+	uint64_t offset = 0;
+	while(1)
+	{
+		CloudApi::PartInfo part;
+
+		// Read as much as we can
+		part.data.resize(1024 * 1024);
+		file.seekg(offset, std::ios::beg);
+		file.read(reinterpret_cast<char *>(&part.data[0]), part.data.size());
+
+		part.data.resize(file.gcount());
+
+		if(part.data.empty())
+			break;
+
+		// Prepare the part
+		part.fingerprint = CreateFingerprint(part.data);
+		part.offset = offset;
+		offset += part.data.size();
+
+		// Add it to our batch
+		partBatch.push_back(std::move(part));
+
+		// Send 5 up at a time
+		if(partBatch.size() == 5)
+			sendPartBatch();
+	}
+
+	// Send up any stragglers
+	sendPartBatch();
 }
 
 int main(int argc, const char *argv[])
@@ -47,8 +121,9 @@ int main(int argc, const char *argv[])
 		("consumer-secret", program_options::value<std::string>()->required(), "The OAUTH consumer secret (required)")
 		("access-token", program_options::value<std::string>()->required(), "The OAUTH access token (required)")
 		("access-token-secret", program_options::value<std::string>()->required(), "The OAUTH access token secret (required)")
+		("debug,d", "Enable debug output")
 		("list,l", program_options::value<std::string>()->required(), "List a path <path>")
-		("send,p", program_options::value<std::vector<std::string>>()->required(), "Send a file <localPath> <remotePatk>");
+		("send,s", program_options::value<std::vector<std::string>>()->required(), "Send a file <localPath> <remotePatk>") 
 		("get,g", program_options::value<std::vector<std::string>>()->required(), "Get a file from the cloud <remotePatk> <localPath");
 
 	program_options::variables_map vm;
@@ -71,6 +146,9 @@ int main(int argc, const char *argv[])
 			std::cout << e.what() << std::endl << desc << std::endl;
 			exit(-1);
 		}
+
+		if(vm.count("debug"))
+			config.debugCallback = [&](const std::string &message) { std::cout << message << std::endl; };
 
 		CloudApi cloudApi(config);
 

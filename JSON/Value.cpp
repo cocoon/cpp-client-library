@@ -259,7 +259,7 @@ ValuePtr Value::Parse(const char **data)
  *
  * @access public
  */
-Value::Value(/*NULL*/)
+Value::Value()
 {
 	m_type = Type_Null;
 }
