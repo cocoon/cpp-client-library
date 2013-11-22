@@ -15,33 +15,19 @@ public:
 	// This structure configurs the CloudApi class
 	struct Config
 	{
-		// Api version the client is adhering too (for now, always 1.0)
 		std::string cloudApiVersion = "1.0";
-
-		// OAuth tokens
 		std::string consumerKey, consumerSecret;
 		std::string accessToken, accessTokenSecret;
-
-		// Address to connect to
 		std::string address = "http://api.qa.copy.com";
-
-		// Enabled to log detailed output to screen
 		bool curlDebug = false;
 	};
 
 	// This structure decribes a chunk of data
 	struct PartInfo
 	{
-		// A has is comprised of an md5 + sha1
 		std::string fingerprint;
-
-		// Data of part (api dependent)
-		std::vector<unsigned char> data;
-
-		// Size of part (data may not be populated)
+		std::vector<uint8_t> data;
 		uint64_t size = 0;
-
-		// Offset of this part relative to a file
 		uint64_t offset = 0;
 	};
 
@@ -72,6 +58,7 @@ public:
 		INVALID_PEER_SYNC_TOKEN = 1029,
 		INVALID_LIST_WATERMARK = 1030,
 		PART_NOT_FOUND = 1600,
+		CLOUD_MALFORMED_PART_RESPONSE = 9998,
 		CLOUD_RESPONSE_FAILURE = 9999, 
 	};
 
@@ -137,8 +124,9 @@ public:
 
 protected:
 	void Perform();
-	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &endpoint = "jsonrpc");
-	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &endpoint = "jsonrpc");
+	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &method = "jsonrpc");
+
+	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method = "jsonrpc");
 	std::string EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request);
 	JSON::ValuePtr ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request = JSON::Object());
 	void ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string, std::string> &headerFields);
@@ -148,6 +136,46 @@ protected:
 	static int CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, void *extra);
 	static size_t CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info);
 	static size_t CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info);
+
+	// Define binary cloud api types
+	const uint32_t BINARY_PARTS_HEADER_VERSION = 1;
+	const uint32_t BINARY_PART_ITEM_VERSION = 1;
+
+	const uint32_t BINARY_PARTS_HEADER_SIG = 0xBA5EBA11;
+	const uint32_t BINARY_PARTS_ITEM_SIG = 0xCAB005E5;
+
+	#pragma pack(push, 1)
+		struct PARTS_HEADER
+		{
+			uint32_t signature;			// "0xba5eba11"
+			uint32_t headerSize;		// Size of this structure
+			uint32_t version;			// Struct version
+			uint32_t bodySize;			// Total size of all data after the header
+			uint32_t partCount;			// Part count
+			uint32_t errorCode;			// Error code for errors regarding the entire 
+		};
+
+		struct PART_ITEM
+		{
+			uint32_t signature;			// "0xcab005e5"
+			uint32_t dataSize;			// Size of this struct plus payload size
+			uint32_t version;			// Struct version
+			uint32_t shareId;			// Share id for part (for verification)
+			char fingerprint[73];		// Part fingerprint
+			uint32_t partSize;			// Size of the part
+			uint32_t payloadSize;		// Size of our payload (partSize or 0, error msg size on error)
+			uint32_t errorCode;			// Error code for individual parts
+			uint32_t reserved;			// Reserved for future use
+		};
+	#pragma pack(pop)
+
+	bool BinaryPackPart(PartInfo part, std::vector<uint8_t> &data, bool addPartData, uint64_t shareId);
+	void BinaryPackPartsHeader(std::vector<uint8_t> &data, uint32_t partCount);
+	uint32_t BinaryParsePartsReply(std::vector<uint8_t> &replyData,
+		 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos);
+	std::vector<uint8_t> ProcessBinaryPartsRequest(const std::string &command, const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
+	std::vector<uint8_t> ProcessBinaryPartsRequest(const std::string &command, std::map<std::string, std::string> &headerFields,
+		const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
 
 	Config m_config;
 	static std::once_flag s_hasInitializedCurl;

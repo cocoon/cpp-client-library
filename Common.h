@@ -15,6 +15,8 @@
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
+#include <cstddef>
+#include <assert.h>
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \
@@ -94,6 +96,7 @@
 #define NET8_CPU(x)	BE8_CPU(x)
 
 #include "Util/Util.h"
+#include "Util/StructParser.h"
 #include "CloudApi/CloudApi.h"
 
 #endif

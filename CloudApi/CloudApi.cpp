@@ -96,11 +96,11 @@ void CloudApi::CreateFile(const std::string &cloudPath, const std::vector<PartIn
 	ProcessRequest("update_objects", headerFields, main_request);
 }
 
-std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &endpoint)
+std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &method)
 {
 	std::string response;
 
-	auto completeUrl = m_config.address + "/" + endpoint;
+	auto completeUrl = m_config.address + "/" + method;
 
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
@@ -333,20 +333,20 @@ CloudApi::CloudObj CloudApi::ParseCloudObj(bool includeParts, const JSON::ValueP
 	return obj;
 }
 
-std::string CloudApi::EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request)
+std::string CloudApi::EncodeJsonRequest(const std::string &method, std::map<std::string, std::string> &headerFields, JSON::Object _request)
 {
 	JSON::JSONRPC requestRpc;
 	requestRpc.id = JSON::Value::Create("0");
-	requestRpc.method = JSON::Value::Create(command);
+	requestRpc.method = JSON::Value::Create(method);
 
 	requestRpc.params  = JSON::Value::Create(_request);
 	auto requestJSON = requestRpc.ToJSON();
 	return JSON::Value::Create(requestJSON)->Stringify();
 }
 
-JSON::ValuePtr CloudApi::ProcessRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request)
+JSON::ValuePtr CloudApi::ProcessRequest(const std::string &method, std::map<std::string, std::string> &headerFields, JSON::Object _request)
 {
-	auto data = EncodeJsonRequest(command, headerFields, _request);
+	auto data = EncodeJsonRequest(method, headerFields, _request);
 
 	auto response = Post(headerFields, data);
 
@@ -360,15 +360,15 @@ JSON::ValuePtr CloudApi::ProcessRequest(const std::string &command, std::map<std
 	return responseRpc.result;
 }
 
-void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &endpoint)
+void CloudApi::SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method)
 {
 	// Do oauth
 	OAuth::Client oauth(&m_oauthConsumer, &m_oauthToken);
 	headerFields["Authorization"] = SplitString(oauth.getFormattedHttpHeader(OAuth::Http::Post,
-		 m_config.address + "/" + endpoint), ": ").second;
+		 m_config.address + "/" + method), ": ").second;
 
 	// Required to bypass oath binary payloads
-	if(endpoint == "has_object_parts" || endpoint == "send_object_parts" || endpoint == "get_object_parts")
+	if(method == "has_object_parts" || method == "send_object_parts" || method == "get_object_parts")
 		headerFields["Content-Type"] = "application/octet-stream";
 
 	headerFields["X-Api-Version"] = m_config.cloudApiVersion;
@@ -432,5 +432,180 @@ void CloudApi::ParseCloudError(JSON::JSONRPC &responseRpc, std::map<std::string,
 	auto errorString = error.Get<std::string>("message");
 
 	throw CloudException(MapCloudError(errorCode), errorString);
+}
+
+/**
+ * BinaryPackPart - Packs a part into a request structure
+ * Returns if it was successful
+ */
+bool CloudApi::BinaryPackPart(PartInfo part, std::vector<uint8_t> &data, bool addPartData, uint64_t shareId)
+{
+	if(data.size() < sizeof(PARTS_HEADER))
+		data.resize(data.size() + sizeof(PARTS_HEADER));
+
+	auto totalDataSize = sizeof(PART_ITEM) + (addPartData ? part.size : 0);
+
+	auto partItem = reinterpret_cast<PART_ITEM *>(&data[0]);
+	data.resize(data.size() + totalDataSize);
+
+	partItem->signature = CPU32_NET(0xCAB005E5);
+	partItem->version = CPU32_NET(BINARY_PART_ITEM_VERSION);
+	partItem->dataSize = CPU32_NET(totalDataSize);
+
+	partItem->shareId = CPU32_NET(static_cast<uint32_t>(shareId));
+
+	strcpy(partItem->fingerprint, part.fingerprint.c_str());
+	partItem->partSize = CPU32_NET(part.size);
+	partItem->payloadSize = (addPartData ? CPU32_NET(part.size) : CPU32_NET(0));
+	partItem->errorCode = CPU32_NET(0);
+
+	if(addPartData)
+		memcpy(&data[PtrToOffset(data, partItem) + sizeof(PART_ITEM)], &part.data[0], part.data.size());
+
+	return true;
+}
+
+/**
+ * BinaryPackPartsHeader - Packs a header into a request structure
+ */
+void CloudApi::BinaryPackPartsHeader(std::vector<uint8_t> &data, uint32_t partCount)
+{
+	if(data.size() < sizeof(PARTS_HEADER))
+		data.resize(data.size() + sizeof(PARTS_HEADER));
+
+	auto header = reinterpret_cast<PARTS_HEADER *>(&data[0]);
+
+	header->signature = CPU32_NET(0xBA5EBA11);
+	header->headerSize = CPU32_NET(sizeof(PARTS_HEADER));
+	header->version = CPU32_NET(BINARY_PARTS_HEADER_VERSION);
+	header->bodySize = CPU32_NET(data.size() - sizeof(PARTS_HEADER));
+	header->partCount = CPU32_NET(partCount);
+	header->errorCode = CPU32_NET(0);
+}
+
+/**
+ * BinaryParsePartsReply - Parses a cloud response from the binary parts api
+ * Returns count of parts with valid part data
+ * Include "parts" if expecting data
+ * Include "partInfos" if wanting what parts the cloud returned
+ */
+uint32_t CloudApi::BinaryParsePartsReply(std::vector<uint8_t> &replyData,
+	 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos)
+{
+	auto *header = reinterpret_cast<PARTS_HEADER *>(&replyData[0]);
+
+	header->signature = NET32_CPU(header->signature);
+	header->headerSize = NET32_CPU(header->headerSize);
+	header->version = NET32_CPU(header->version);
+	header->bodySize = NET32_CPU(header->bodySize);
+	header->partCount = NET32_CPU(header->partCount);
+	header->errorCode = NET32_CPU(header->errorCode);
+
+	if(header->signature != BINARY_PARTS_HEADER_SIG)
+		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: Invalid header signature");
+	else if(header->errorCode)
+		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, reinterpret_cast<char *>(&replyData[sizeof(PARTS_HEADER)]));
+	else if(header->headerSize != sizeof(PARTS_HEADER))
+		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: Invalid header size");
+	else if(parts && parts->size() != header->partCount)
+		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: didn't get expected part count from cloud");
+	
+	StructParser parser(offsetof(PART_ITEM, dataSize),
+		 &replyData[sizeof(PARTS_HEADER)], header->bodySize, false, true);
+
+	std::list<PartInfo>::iterator partInfoIter;
+	if(parts)
+		partInfoIter = parts->begin();
+	PART_ITEM *partItem;
+	uint32_t  partCount = 0;
+	while(partItem = parser.GetNextEntry<PART_ITEM>())
+	{
+		partItem->signature = NET32_CPU(partItem->signature);
+		partItem->dataSize = NET32_CPU(partItem->dataSize);
+		partItem->version = NET32_CPU(partItem->version);
+		partItem->shareId = NET32_CPU(partItem->shareId);
+		partItem->partSize = NET32_CPU(partItem->partSize);
+		partItem->payloadSize = NET32_CPU(partItem->payloadSize);
+		partItem->errorCode = NET32_CPU(partItem->errorCode);
+
+		if(partInfos)
+			partInfos->push_back(partItem);
+
+		if(partItem->signature != BINARY_PARTS_ITEM_SIG)
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part signature");
+		else if(parts && partItem->errorCode)
+		{
+			(*partInfoIter).data.resize(0);
+			std::cerr << "Part error " << reinterpret_cast<char *>(&replyData[PtrToOffset(replyData, partItem) + sizeof(PART_ITEM)]);
+			continue;
+		}
+		else if(parts && std::string(partItem->fingerprint) != (*partInfoIter).fingerprint)
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part fingerprint");
+		else if(parts && partItem->partSize != (*partInfoIter).size)
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part size");
+		else if(parts && partItem->payloadSize != partItem->partSize)
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part payload size");
+		else if(parts && partItem->dataSize != partItem->partSize + sizeof(PART_ITEM))
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part data size");
+		else if(partItem->version != BINARY_PART_ITEM_VERSION)
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: invalid part structure version");
+
+		if(!parts)
+		{
+			partCount++;
+			continue;
+		}
+
+		// Make sure we dont read past the buffer
+		auto currentOffset = PtrToOffset(replyData, partItem);
+		if(currentOffset + sizeof(PART_ITEM) + (*partInfoIter).size > replyData.size())
+			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: not enough data from cloud");
+
+		(*partInfoIter).data.resize(currentOffset + sizeof(PART_ITEM));
+		memcpy(&(*partInfoIter).data[0], &replyData[0], (*partInfoIter).size);
+		
+		auto actualHash = CreateFingerprint((*partInfoIter).data);
+		assert(actualHash == partItem->fingerprint);
+
+		partInfoIter++;
+		partCount++;
+	}
+
+	return partCount;
+}
+
+
+std::vector<uint8_t> CloudApi::ProcessBinaryPartsRequest(const std::string &method,
+	 const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode)
+{
+	std::map<std::string, std::string> headerFields;
+	SetCommonHeaderFields(headerFields, method);
+
+	return ProcessBinaryPartsRequest(method, headerFields, parts, shareId, sendMode);
+}
+
+std::vector<uint8_t> CloudApi::ProcessBinaryPartsRequest(const std::string &method, std::map<std::string, std::string> &headerFields,
+	const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode)
+{
+	std::vector<uint8_t> requestData;
+	uint32_t partCount = 0;
+	uint32_t totalPartSize = 0;
+
+	for(auto &part : parts)
+	{
+		if(BinaryPackPart(part, requestData, sendMode, shareId))
+		{
+			partCount++;
+			totalPartSize += part.size;
+		}
+	}
+
+	auto contentLength = static_cast<uint32_t>(requestData.size());
+
+	BinaryPackPartsHeader(requestData, partCount);
+
+	auto response = ToData(Post(headerFields, ToString(requestData), method));
+
+	return response;
 }
 
