@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <assert.h>
 #include <fstream>
+#include <list>
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \
@@ -101,6 +102,9 @@
 #include "Util/StructParser.h"
 #include "U8/U8.h"
 #include "JSON/JSON.h"
+
+#include <liboauthcpp/liboauthcpp.h>
+
 #include "CloudApi/CloudApi.h"
 
 #endif

@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-namespace CopyExample {
+namespace Copy {
 
 /**
  * CloudApi - The example class for copy api

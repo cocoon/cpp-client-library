@@ -6,7 +6,7 @@
 #define __IS_BIG_ENDIAN__ false
 #endif
 
-namespace CopyExample {
+namespace Copy {
 
 /**
  * StructParser - The variable structure class parses a memory

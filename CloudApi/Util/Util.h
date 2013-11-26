@@ -1,7 +1,7 @@
 #pragma once
 
-namespace Copy
-{
+namespace Copy {
+
 	inline std::pair<std::string, std::string> SplitString(std::string s, const std::string &delim) 
 	{
 		auto position = s.find(delim);

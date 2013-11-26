@@ -23,7 +23,6 @@
  */
 
 #include "Common.h"
-#include "U8.h"
 
 namespace Copy {
 	namespace JSON {
@@ -227,7 +226,7 @@ double ParseDecimal(const char **data)
 /**
  * Parses a complete JSON encoded string (UNICODE input version)
  */
-CopyExample::JSON::ValuePtr CopyExample::JSON::Parse(const char *data)
+Copy::JSON::ValuePtr Copy::JSON::Parse(const char *data)
 {
 	// Skip any preceding whitespace, end of data = no JSON = fail
 	if(!SkipWhitespace(&data))
@@ -249,7 +248,7 @@ CopyExample::JSON::ValuePtr CopyExample::JSON::Parse(const char *data)
 /**
  * Turns the passed in JSON::Value into a JSON encode string
  */
-std::string CopyExample::JSON::Stringify(const Value *value)
+std::string Copy::JSON::Stringify(const Value *value)
 {
 	if(value != nullptr)
 		return value->Stringify();

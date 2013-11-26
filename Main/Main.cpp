@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "boost/program_options.hpp"
-#include "Common.h"
+#include "CloudApi/Common.h"
 
 using namespace CopyExample;
 using namespace boost;

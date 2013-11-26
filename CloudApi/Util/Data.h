@@ -1,6 +1,6 @@
 #pragma once
 
-namespace CopyExample {
+namespace Copy {
 
 class Data
 {

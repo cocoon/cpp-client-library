@@ -24,7 +24,7 @@
 
 #pragma once
 
-namespace CopyExample {
+namespace Copy {
 	namespace JSON {
 
 inline Object::Object() 

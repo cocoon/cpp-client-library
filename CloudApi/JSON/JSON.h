@@ -42,7 +42,7 @@ typedef std::vector<ValuePtr> Array;
 #include "JSON/Value.h"
 #include "JSON/JSONRPC.h"
 
-namespace CopyExample {
+namespace Copy{
 	namespace JSON {
 
 ValuePtr Parse(const char *data);

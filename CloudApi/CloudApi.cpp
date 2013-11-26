@@ -1,6 +1,6 @@
 #include "CloudApi.h"
 
-using namespace CopyExample;
+using namespace Copy;
 
 std::once_flag CloudApi::s_hasInitializedCurl;
 
