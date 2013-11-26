@@ -5,38 +5,65 @@ namespace Copy {
 class Data
 {
 public:
-	Data() {}
+	Data(size_t size) 
+	{
+		m_data.resize(size);
+	}
+
+	Data()
+	{
+	}
+
+	Data(const std::string &string)
+	{
+		for(auto &chr : string)
+			m_data.push_back(chr);
+	}
 
 	size_t Size() const { return m_data.size(); }
 	void Resize(size_t size) { m_data.resize(size); }
 
 	size_t PtrToOffset(void *ptr)
 	{
-		// @@ TODO
-		return 0; 
+		// Check to see if it exists
+		if(&m_data[0] > ptr)
+			throw std::logic_error("Invalid cast");
+		
+		auto offset = (size_t) ((uint64_t)ptr - (uint64_t)&m_data[0]);
+
+		if(!offset < Size())
+			throw std::logic_error("Invalid cast");
+		
+		return offset;
 	}
 
 	std::string ToString()
 	{
-		// @@ TODO
-		return std::string();
-	}
-
-	static Data FromString(const std::string &string)
-	{
-		// @@ TODO
-		return Data();
+		std::string string;
+		for(auto &chr : m_data)
+			string.push_back(chr);
+		return string;
 	}
 
 	std::string CreateFingerprint()
 	{
-		// @@ TODO
-		return std::string();
+		MD5_CTX md5Ctx;
+		MD5_Init(&md5Ctx);
+		MD5_Update(&md5Ctx, &m_data[0], m_data.size());
+		Data md5digest(16);
+		MD5_Final(md5digest.Cast<uint8_t>(), &md5Ctx);
+
+		SHA_CTX sha1Ctx;
+		SHA1_Init(&sha1Ctx);
+		SHA1_Update(&sha1Ctx, &m_data[0], m_data.size());
+		Data sha1digest(20);
+		SHA1_Final(sha1digest.Cast<uint8_t>(), &sha1Ctx);
 	}
 
 	void Release()
 	{
-		// @@ TODO
+		m_data.resize(0);
+		m_data.shrink_to_fit();
 	}
 
 	template<typename T>

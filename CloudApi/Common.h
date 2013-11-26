@@ -19,6 +19,8 @@
 #include <assert.h>
 #include <fstream>
 #include <list>
+#include <openssl/md5.h>
+#include <openssl/sha.h>
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \

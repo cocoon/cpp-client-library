@@ -611,6 +611,6 @@ Data CloudApi::ProcessBinaryPartsRequest(const std::string &method, std::map<std
 
 	BinaryPackPartsHeader(requestData, partCount);
 
-	return Data::FromString(Post(headerFields, requestData.ToString(), method));
+	return Data(Post(headerFields, requestData.ToString(), method));
 }
 
