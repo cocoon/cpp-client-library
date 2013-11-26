@@ -38,28 +38,10 @@ namespace CopyExample
 			return std::to_string(bytes) + "B";
 	}
 
-	inline size_t PtrToOffset(const std::vector<uint8_t> &data, void *ptr)
-	{
-		// @@ TODO
-		return 0; 
-	}
-
-	inline std::string ToString(const std::vector<uint8_t> &data)
-	{
-		// @@ TODO
-		return std::string();
-	}
-
 	inline std::vector<uint8_t> ToData(const std::string &string)
 	{
 		// @@ TODO
 		return std::vector<uint8_t>();
-	}
-
-	inline std::string CreateFingerprint(const std::vector<uint8_t> &data)
-	{
-		// @@ TODO
-		return std::string();
 	}
 }
 

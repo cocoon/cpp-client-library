@@ -70,7 +70,7 @@ static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 			// Clear their data and transfer back to main part bucket
 			for(auto &part : partBatch)
 			{
-				part.data.clear();
+				part.data.Release();
 				parts.push_back(std::move(part));
 			}
 
@@ -84,19 +84,19 @@ static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 		CloudApi::PartInfo part;
 
 		// Read as much as we can
-		part.data.resize(1024 * 1024);
+		part.data.Resize(1024 * 1024);
 		file.seekg(offset, std::ios::beg);
-		file.read(reinterpret_cast<char *>(&part.data[0]), part.data.size());
+		file.read(part.data.Cast<char>(), part.data.Size());
 
-		part.data.resize(file.gcount());
+		part.data.Resize(file.gcount());
 
-		if(part.data.empty())
+		if(part.data.IsEmpty())
 			break;
 
 		// Prepare the part
-		part.fingerprint = CreateFingerprint(part.data);
+		part.fingerprint = part.data.CreateFingerprint();
 		part.offset = offset;
-		offset += part.data.size();
+		offset += part.data.Size();
 
 		// Add it to our batch
 		partBatch.push_back(std::move(part));

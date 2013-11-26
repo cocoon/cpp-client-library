@@ -96,6 +96,7 @@
 #define NET16_CPU(x)	BE16_CPU(x)
 #define NET8_CPU(x)	BE8_CPU(x)
 
+#include "Util/Data.h"
 #include "Util/Util.h"
 #include "Util/StructParser.h"
 #include "CloudApi/CloudApi.h"

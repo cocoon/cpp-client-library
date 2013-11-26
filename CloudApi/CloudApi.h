@@ -26,7 +26,7 @@ public:
 	struct PartInfo
 	{
 		std::string fingerprint;
-		std::vector<uint8_t> data;
+		Data data;
 		uint64_t size = 0;
 		uint64_t offset = 0;
 	};
@@ -169,12 +169,12 @@ protected:
 		};
 	#pragma pack(pop)
 
-	bool BinaryPackPart(PartInfo part, std::vector<uint8_t> &data, bool addPartData, uint64_t shareId);
-	void BinaryPackPartsHeader(std::vector<uint8_t> &data, uint32_t partCount);
-	uint32_t BinaryParsePartsReply(std::vector<uint8_t> &replyData,
+	bool BinaryPackPart(PartInfo part, Data &data, bool addPartData, uint64_t shareId);
+	void BinaryPackPartsHeader(Data &data, uint32_t partCount);
+	uint32_t BinaryParsePartsReply(Data &replyData,
 		 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos);
-	std::vector<uint8_t> ProcessBinaryPartsRequest(const std::string &command, const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
-	std::vector<uint8_t> ProcessBinaryPartsRequest(const std::string &command, std::map<std::string, std::string> &headerFields,
+	Data ProcessBinaryPartsRequest(const std::string &command, const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
+	Data ProcessBinaryPartsRequest(const std::string &command, std::map<std::string, std::string> &headerFields,
 		const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
 
 	Config m_config;
