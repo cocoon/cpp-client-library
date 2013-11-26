@@ -2,7 +2,7 @@
 #include "boost/program_options.hpp"
 #include "CloudApi/Common.h"
 
-using namespace CopyExample;
+using namespace Copy;
 using namespace boost;
 
 static void DoList(CloudApi &cloudApi, program_options::variables_map &vm)
