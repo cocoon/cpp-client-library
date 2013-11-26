@@ -1,2 +1,0 @@
-ADD_LIBRARY(U8 STATIC U8.cpp U8.h)
-

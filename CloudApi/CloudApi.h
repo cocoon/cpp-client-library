@@ -1,8 +1,6 @@
 #pragma once
 
 #include "Common.h"
-#include "JSON.h"
-#include <liboauthcpp/liboauthcpp.h>
 
 namespace CopyExample {
 
