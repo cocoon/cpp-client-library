@@ -54,37 +54,44 @@ public:
 	template<typename T>
 	T * CastAllocAtEnd(size_t length)
 	{
-		// @@ TODO
-		return nullptr;
+		Grow(length);
+		return Cast<T>(Size() - length);
 	}
 
 	void Grow(size_t length)
 	{
-		// @@ TODO
+		Resize(Size() + length);
 	}
 
 	void Copy(size_t length, const Data &data)
 	{
-		// @@ TODO
+		if(Size() < data.Size())
+			throw std::logic_error("Not enough room to copy bytes");
+
+		Copy(length, data.Cast<uint8_t>(0, length));
 	}
 
 	void Copy(size_t length, const void *data)
 	{
-		// @@ TODO
+		memcpy(Cast<uint8_t>(), data, length);
 	}
 
 	template<typename T>
 	const T * Cast(size_t offset = 0, size_t expectedSize = 0) const
 	{
-		// @@ TODO
-		return nullptr;
+		if(Size() - offset < expectedSize)
+			throw std::logic_error("Bad cast");
+
+		return reinterpret_cast<const T *>(&m_data[offset]);
 	}
 
 	template<typename T>
 	T * Cast(size_t offset = 0, size_t expectedSize = 0)
 	{
-		// @@ TODO
-		return nullptr;
+		if(Size() - offset < expectedSize)
+			throw std::logic_error("Bad cast");
+
+		return reinterpret_cast<T *>(&m_data[offset]);
 	}
 
 	bool IsEmpty() const { return m_data.empty(); }

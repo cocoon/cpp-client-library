@@ -33,10 +33,10 @@ static void DoList(CloudApi &cloudApi, program_options::variables_map &vm)
 
 static void DoGet(CloudApi &cloudApi, program_options::variables_map &vm)
 {
-	auto cloudPath = vm["get"].as<std::vector<std::string>>()[0];
-	auto filePath = vm["get"].as<std::vector<std::string>>()[1];
+	auto cloudPath = vm["get"].as<std::string>();
+	auto filePath = vm["target"].as<std::string>();
 
-	std::cout << "Downloading cloud path" << cloudPath << std::endl;
+	std::cout << "Downloading " << cloudPath << " to " << filePath << std::endl;
 
 	// List the file to get its part list
 	CloudApi::ListConfig config;
@@ -45,15 +45,30 @@ static void DoGet(CloudApi &cloudApi, program_options::variables_map &vm)
 
 	auto result = cloudApi.ListPath(config);
 
+	// Fetch the parts and write them to the target file
+	std::ofstream file;
+	file.open(filePath, std::ios::binary);
+	if(!file.is_open())
+		throw std::logic_error(std::string("Failed to open ") + filePath);
+
 	for(auto &part : result.root.parts)
-		std::cout << "Detected part " << part.fingerprint << " for file" << std::endl;
+	{
+		cloudApi.GetPart(part);
+
+		// And write it out
+		file.write(part.data.Cast<char>(), part.data.Size());
+	}
+
+	std::cout << "Successfully downloaded " << cloudPath << " to " << filePath << std::endl;
+
+	file.close();
 }
 
 static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 {
 	std::ifstream file;
-	auto filePath = vm["send"].as<std::vector<std::string>>()[0];
-	auto cloudPath = vm["send"].as<std::vector<std::string>>()[1];
+	auto filePath = vm["send"].as<std::string>();
+	auto cloudPath = vm["target"].as<std::string>();
 
 	std::cout << "Sending " << filePath << " to " << cloudPath << std::endl;
 
@@ -128,8 +143,9 @@ int main(int argc, const char *argv[])
 		("access-token-secret", program_options::value<std::string>()->required(), "The OAUTH access token secret (required)")
 		("debug,d", "Enable debug output")
 		("list,l", program_options::value<std::string>()->required(), "List a path <path>")
-		("send,s", program_options::value<std::vector<std::string>>()->required(), "Send a file <localPath> <remotePatk>") 
-		("get,g", program_options::value<std::vector<std::string>>()->required(), "Get a file from the cloud <remotePatk> <localPath");
+		("send,s", program_options::value<std::string>()->required(), "Send a file") 
+		("get,g", program_options::value<std::string>()->required(), "Get a file from the cloud ")
+		("target,t", program_options::value<std::string>()->required(), "Target for send or get");
 
 	program_options::variables_map vm;
 

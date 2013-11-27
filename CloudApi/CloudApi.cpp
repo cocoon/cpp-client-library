@@ -32,11 +32,19 @@ CloudApi::~CloudApi()
 }
 
 /**
- * GetParts - This function fetches parts from the cloud
+ * GetPart - This function fetches a part from the cloud
  */
-void CloudApi::GetParts(std::vector<PartInfo> &parts)
+void CloudApi::GetPart(PartInfo &part, uint64_t shareId)
 {
-	// @@ TODO
+	std::list<PartInfo> parts;
+	parts.push_back(part);
+
+	auto data = ProcessBinaryPartsRequest("get_object_parts", parts, shareId, false);
+
+	if(!BinaryParsePartsReply(data, &parts))
+		throw CloudException(PART_NOT_FOUND, std::string("Unable to locate ") + part.fingerprint);
+	
+	part = parts.front();
 }
 
 /**

@@ -80,7 +80,7 @@ public:
 
 	void SendNeededParts(const std::vector<PartInfo> &parts);
 	std::vector<PartInfo> HasParts(std::vector<PartInfo> parts);
-	void GetParts(std::vector<PartInfo> &parts);
+	void GetPart(PartInfo &part, uint64_t shareId = 0);
 	void CreateFile(const std::string &path, const std::vector<PartInfo> &parts);
 
 	struct CloudObj
@@ -170,7 +170,7 @@ protected:
 	bool BinaryPackPart(PartInfo part, Data &data, bool addPartData, uint64_t shareId);
 	void BinaryPackPartsHeader(Data &data, uint32_t partCount);
 	uint32_t BinaryParsePartsReply(Data &replyData,
-		 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos);
+		 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos = nullptr);
 	Data ProcessBinaryPartsRequest(const std::string &command, const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
 	Data ProcessBinaryPartsRequest(const std::string &command, std::map<std::string, std::string> &headerFields,
 		const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
