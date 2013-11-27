@@ -58,6 +58,10 @@ namespace Copy {
 		return result;
 	}
 
+	/**
+	 * CreateFingerprint - Fingerprints a chunk of data,
+	 * a fingerprint is an md5+sha1
+	 */
 	inline std::string CreateFingerprint(const Data &data)
 	{
 		std::string result;
@@ -81,6 +85,10 @@ namespace Copy {
 		return result;
 	}
 
+	/**
+	 * GetFileFromPath - Given a path of / seperated components, returns
+	 * the left most component
+	 */
 	inline std::string GetFileFromPath(const std::string &path)
 	{
 		// Locate the first instance of a path seperator
@@ -89,6 +97,20 @@ namespace Copy {
 			return path;
 
 		return path.substr(location + 1);
+	}
+
+	/**
+	 * GetParentFromPath - Given a path of / seperated components, removes
+	 * the left most component, and the leaf /
+	 */
+	inline std::string GetParentFromPath(const std::string &path)
+	{
+		// Locate the first instance of a path seperator
+		auto location = path.rfind('/');
+		if(location == std::string::npos)
+			return path;
+
+		return path.substr(0, location);
 	}
 }
 

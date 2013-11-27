@@ -22,8 +22,12 @@ static void DoList(CloudApi &cloudApi, program_options::variables_map &vm)
 	std::cout << "Listing for path: " << listConfig.path << std::endl;
 	for(auto &obj : result.children)
 	{
-		std::cout << std::setw(5) << obj.type << std::setw(10) << PrettySize(obj.size)
-			 << " " << GetFileFromPath(obj.path) << std::endl;
+		if(obj.type == "file")
+			std::cout << std::setw(5) << obj.type << std::setw(10) << PrettySize(obj.size)
+				 << " " << GetFileFromPath(obj.path) << std::endl;
+		else
+			std::cout << std::setw(5) << obj.type << std::setw(10) 
+				 << " " << GetFileFromPath(obj.path) << std::endl;
 	}
 }
 

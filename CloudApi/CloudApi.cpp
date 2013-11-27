@@ -319,21 +319,33 @@ CloudApi::CloudObj CloudApi::ParseCloudObj(const JSON::ValuePtr &cloudObjInfo)
 	if(type == "file")
 	{
 		obj.size = cloudObjInfoObj.GetOpt<uint64_t>("size", 0);
-			
-		if(cloudObjInfoObj.Has("parts"))
+
+		if(cloudObjInfoObj.Has("revisions"))
 		{
-			auto partsArray = cloudObjInfoObj.Get<JSON::Array>("parts");
-			for(auto &partInfo : partsArray)
+			auto revisionsArray = cloudObjInfoObj.Get<JSON::Array>("revisions");
+
+			for(auto &revision : revisionsArray)
 			{
-				PartInfo part;
+				auto revisionObj = revision->AsObject();
 
-				auto partInfoObj = partInfo->AsObject();
+				if(revisionObj.Has("parts"))
+				{
+					auto partsArray = revisionObj.Get<JSON::Array>("parts");
+					for(auto &partInfo : partsArray)
+					{
+						PartInfo part;
 
-				part.offset = partInfoObj.Get<uint64_t>("offset");
-				part.size = partInfoObj.Get<uint32_t>("size");
-				part.fingerprint = partInfoObj.Get<std::string>("fingerprint");
+						auto partInfoObj = partInfo->AsObject();
 
-				obj.parts.push_back(part);
+						part.offset = partInfoObj.Get<uint64_t>("offset");
+						part.size = partInfoObj.Get<uint32_t>("size");
+						part.fingerprint = partInfoObj.Get<std::string>("fingerprint");
+
+						obj.parts.push_back(part);
+					}
+				}
+
+				break;
 			}
 		}
 	}
