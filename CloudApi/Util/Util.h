@@ -81,5 +81,14 @@ namespace Copy {
 		return result;
 	}
 
+	inline std::string GetFileFromPath(const std::string &path)
+	{
+		// Locate the first instance of a path seperator
+		auto location = path.rfind('/');
+		if(location == std::string::npos)
+			return path;
+
+		return path.substr(location + 1);
+	}
 }
 

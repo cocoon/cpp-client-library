@@ -19,10 +19,11 @@ static void DoList(CloudApi &cloudApi, program_options::variables_map &vm)
 			fieldWidth = obj.path.size();
 	}
 
+	std::cout << "Listing for path: " << listConfig.path << std::endl;
 	for(auto &obj : result.children)
 	{
-		std::cout << std::setw(5) << obj.type << std::setw(5) << PrettySize(obj.size)
-			 << " " << obj.path << std::endl;
+		std::cout << std::setw(5) << obj.type << std::setw(10) << PrettySize(obj.size)
+			 << " " << GetFileFromPath(obj.path) << std::endl;
 	}
 }
 
