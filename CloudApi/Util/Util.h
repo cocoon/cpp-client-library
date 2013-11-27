@@ -38,10 +38,48 @@ namespace Copy {
 			return std::to_string(bytes) + "B";
 	}
 
-	inline std::vector<uint8_t> ToData(const std::string &string)
+	inline std::string HexDump(const Data &data)
 	{
-		// @@ TODO
-		return std::vector<uint8_t>();
+		std::string result;
+
+		auto _hexDigit = [](uint8_t c)->char
+			{
+				if(c < 10)
+					return c + '0';
+				return c + 'a' - 10;
+			};
+
+		for(auto &chr : data)
+		{
+			result.push_back(_hexDigit(chr >> 4));
+			result.push_back(_hexDigit(chr & 0xf));
+		}
+
+		return result;
 	}
+
+	inline std::string CreateFingerprint(const Data &data)
+	{
+		std::string result;
+
+		MD5_CTX md5Ctx;
+		MD5_Init(&md5Ctx);
+		MD5_Update(&md5Ctx, data.Cast<uint8_t>(), data.Size());
+		Data md5digest(16);
+		MD5_Final(md5digest.Cast<uint8_t>(), &md5Ctx);
+
+		result += HexDump(md5digest);
+
+		SHA_CTX sha1Ctx;
+		SHA1_Init(&sha1Ctx);
+		SHA1_Update(&sha1Ctx, data.Cast<uint8_t>(), data.Size());
+		Data sha1digest(20);
+		SHA1_Final(sha1digest.Cast<uint8_t>(), &sha1Ctx);
+
+		result += HexDump(sha1digest);
+
+		return result;
+	}
+
 }
 

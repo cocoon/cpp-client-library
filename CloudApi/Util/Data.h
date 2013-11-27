@@ -45,21 +45,6 @@ public:
 		return string;
 	}
 
-	std::string CreateFingerprint()
-	{
-		MD5_CTX md5Ctx;
-		MD5_Init(&md5Ctx);
-		MD5_Update(&md5Ctx, &m_data[0], m_data.size());
-		Data md5digest(16);
-		MD5_Final(md5digest.Cast<uint8_t>(), &md5Ctx);
-
-		SHA_CTX sha1Ctx;
-		SHA1_Init(&sha1Ctx);
-		SHA1_Update(&sha1Ctx, &m_data[0], m_data.size());
-		Data sha1digest(20);
-		SHA1_Final(sha1digest.Cast<uint8_t>(), &sha1Ctx);
-	}
-
 	void Release()
 	{
 		m_data.resize(0);
@@ -89,6 +74,13 @@ public:
 	}
 
 	template<typename T>
+	const T * Cast(size_t offset = 0, size_t expectedSize = 0) const
+	{
+		// @@ TODO
+		return nullptr;
+	}
+
+	template<typename T>
 	T * Cast(size_t offset = 0, size_t expectedSize = 0)
 	{
 		// @@ TODO
@@ -97,8 +89,14 @@ public:
 
 	bool IsEmpty() const { return m_data.empty(); }
 
+	std::vector<uint8_t>::iterator begin() { return m_data.begin(); }
+	std::vector<uint8_t>::iterator end() { return m_data.end(); }
+
+	std::vector<uint8_t>::const_iterator begin() const { return m_data.begin(); }
+	std::vector<uint8_t>::const_iterator end() const { return m_data.end(); }
+
 protected:
-	std::vector<unsigned char> m_data;
+	std::vector<uint8_t> m_data;
 };
 
 }

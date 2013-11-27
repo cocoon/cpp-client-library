@@ -94,7 +94,7 @@ static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 			break;
 
 		// Prepare the part
-		part.fingerprint = part.data.CreateFingerprint();
+		part.fingerprint = CreateFingerprint(part.data);
 		part.offset = offset;
 		offset += part.data.Size();
 

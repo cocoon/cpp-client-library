@@ -572,7 +572,7 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 		partInfoIter->data.Resize(partInfoIter->size);
 		partInfoIter->data.Copy(partInfoIter->size, replyData.Cast<char>(currentOffset + sizeof(PART_ITEM), partInfoIter->size));
 		
-		auto actualHash = partInfoIter->data.CreateFingerprint();
+		auto actualHash = CreateFingerprint(partInfoIter->data);
 		assert(actualHash == partItem->fingerprint);
 
 		partInfoIter++;
