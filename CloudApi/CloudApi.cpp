@@ -525,7 +525,7 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 		partInfoIter = parts->begin();
 	PART_ITEM *partItem;
 	uint32_t  partCount = 0;
-	while(partItem = parser.GetNextEntry<PART_ITEM>())
+	while((partItem = parser.GetNextEntry<PART_ITEM>()))
 	{
 		partItem->signature = NET32_CPU(partItem->signature);
 		partItem->dataSize = NET32_CPU(partItem->dataSize);
