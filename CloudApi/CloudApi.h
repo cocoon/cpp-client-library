@@ -23,10 +23,12 @@ public:
 	// This structure decribes a chunk of data
 	struct PartInfo
 	{
-		std::string fingerprint;
+ 		std::string fingerprint;
 		Data data;
 		uint64_t size = 0;
 		uint64_t offset = 0;
+        uint32_t errorCode;
+        std::string errorDesc;
 	};
 
 	// Populated from a call to Login, returns all the information about the
@@ -80,8 +82,9 @@ public:
 	CloudApi(Config param);
 	~CloudApi();
 
-	void SendNeededParts(const std::vector<PartInfo> &parts);
-	std::vector<PartInfo> HasParts(std::vector<PartInfo> parts);
+	void SendNeededParts(const std::vector<PartInfo> &parts, uint64_t shareId = 0);
+	void SendParts(const std::vector<PartInfo> &parts, uint64_t shareId = 0);
+	std::vector<PartInfo> HasParts(std::vector<PartInfo> parts, uint64_t shareId = 0);
 	void GetPart(PartInfo &part, uint64_t shareId = 0);
 	void CreateFile(const std::string &path, const std::vector<PartInfo> &parts);
 
@@ -172,10 +175,10 @@ protected:
 	bool BinaryPackPart(PartInfo part, Data &data, bool addPartData, uint64_t shareId);
 	void BinaryPackPartsHeader(Data &data, uint32_t partCount);
 	uint32_t BinaryParsePartsReply(Data &replyData,
-		 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos = nullptr);
-	Data ProcessBinaryPartsRequest(const std::string &command, const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
+		 std::vector<PartInfo> *parts, std::vector<PART_ITEM*> *partInfos = nullptr);
+	Data ProcessBinaryPartsRequest(const std::string &command, const std::vector<PartInfo> &parts, uint64_t shareId, bool sendMode);
 	Data ProcessBinaryPartsRequest(const std::string &command, std::map<std::string, std::string> &headerFields,
-		const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode);
+		const std::vector<PartInfo> &parts, uint64_t shareId, bool sendMode);
 
 	Config m_config;
 	static std::once_flag s_hasInitializedCurl;

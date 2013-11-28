@@ -36,7 +36,7 @@ CloudApi::~CloudApi()
  */
 void CloudApi::GetPart(PartInfo &part, uint64_t shareId)
 {
-	std::list<PartInfo> parts;
+	std::vector<PartInfo> parts;
 	parts.push_back(part);
 
 	auto data = ProcessBinaryPartsRequest("get_object_parts", parts, shareId, false);
@@ -51,18 +51,73 @@ void CloudApi::GetPart(PartInfo &part, uint64_t shareId)
  * HasParts - This function will ask the cloud if it has the requested parts, and return
  * a vector of parts that the cloud does not have
  */
-std::vector<CloudApi::PartInfo> CloudApi::HasParts(std::vector<PartInfo> parts)
+std::vector<CloudApi::PartInfo> CloudApi::HasParts(std::vector<PartInfo> parts, uint64_t shareId)
 {
-	// @@ TODO
-	return parts;
+    std::vector<PartInfo> neededParts;
+
+	if(parts.empty())
+		return neededParts;
+
+	auto data = ProcessBinaryPartsRequest("has_object_parts", parts, shareId, false);
+
+    std::vector<PART_ITEM *> partItems;
+
+	BinaryParsePartsReply(data, nullptr, &partItems);
+
+	if(!partItems.empty())
+	{
+		for(auto iter = parts.begin(); iter != parts.end(); iter++) 
+		{
+			bool bFound = false;
+			for(auto &cloudPart : partItems)
+			{
+				if(iter->fingerprint == cloudPart->fingerprint)
+				{
+					if(!cloudPart->partSize || cloudPart->errorCode)
+					{
+						if(cloudPart->errorCode)
+						{
+							// Save the part error in the PartInfo if we want to use this at some point
+							iter->errorCode = cloudPart->errorCode;
+							auto errMsgOffset = data.PtrToOffset(cloudPart) + sizeof(PART_ITEM);
+
+							// Get the error message out of the reply data
+							if(errMsgOffset + cloudPart->payloadSize < data.Size())
+								iter->errorDesc = std::string(data.Cast<char>() + data.PtrToOffset(cloudPart) +
+                                            sizeof(PART_ITEM), cloudPart->payloadSize);
+						}
+
+ 						neededParts.push_back(*iter);
+					}
+					 break;
+				}
+			}
+		}
+	}
+				
+	return neededParts;
 }
 
 /**
  * SendNeededParts - This function sends all the parts in the vector, that the cloud doesn't have
  */
-void CloudApi::SendNeededParts(const std::vector<PartInfo> &parts)
+void CloudApi::SendNeededParts(const std::vector<PartInfo> &parts, uint64_t shareId)
 {
-	// @@ TODO
+	SendParts(HasParts(parts));
+}
+
+/**
+ * SendParts - Sends a group of parts to the cloud (Whether it has it or not)
+ */
+void CloudApi::SendParts(const std::vector<PartInfo> &parts, uint64_t shareId)
+{
+	if(parts.empty())
+		return;
+
+	auto data = ProcessBinaryPartsRequest("send_object_parts", parts, shareId, true);
+
+	if(BinaryParsePartsReply(data, nullptr, nullptr) != parts.size())
+		throw CloudException(CLOUD_RESPONSE_FAILURE, "Not all parts were excepted by the cloud");
 }
 
 /**
@@ -467,8 +522,8 @@ bool CloudApi::BinaryPackPart(PartInfo part, Data &data, bool addPartData, uint6
 	partItem->errorCode = CPU32_NET(0);
 
 	if(addPartData)
-		data.Copy(data.PtrToOffset(partItem) + sizeof(PART_ITEM), part.data);
-
+		data.Copy(data.PtrToOffset(partItem) + sizeof(PART_ITEM), part.data.Size(), part.data);
+    
 	return true;
 }
 
@@ -497,7 +552,7 @@ void CloudApi::BinaryPackPartsHeader(Data &data, uint32_t partCount)
  * Include "partInfos" if wanting what parts the cloud returned
  */
 uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
-	 std::list<PartInfo> *parts, std::list<PART_ITEM*> *partInfos)
+	 std::vector<PartInfo> *parts, std::vector<PART_ITEM*> *partInfos)
 {
 	auto *header = replyData.Cast<PARTS_HEADER>();
 
@@ -520,7 +575,7 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 	StructParser parser(offsetof(PART_ITEM, dataSize),
 		 replyData.Cast<uint8_t>() + sizeof(PARTS_HEADER), header->bodySize, false, true);
 
-	std::list<PartInfo>::iterator partInfoIter;
+	std::vector<PartInfo>::iterator partInfoIter;
 	if(parts)
 		partInfoIter = parts->begin();
 	PART_ITEM *partItem;
@@ -594,7 +649,7 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 }
 
 Data CloudApi::ProcessBinaryPartsRequest(const std::string &method,
-	 const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode)
+	 const std::vector<PartInfo> &parts, uint64_t shareId, bool sendMode)
 {
 	std::map<std::string, std::string> headerFields;
 	SetCommonHeaderFields(headerFields, method);
@@ -603,7 +658,7 @@ Data CloudApi::ProcessBinaryPartsRequest(const std::string &method,
 }
 
 Data CloudApi::ProcessBinaryPartsRequest(const std::string &method, std::map<std::string, std::string> &headerFields,
-	const std::list<PartInfo> &parts, uint64_t shareId, bool sendMode)
+	const std::vector<PartInfo> &parts, uint64_t shareId, bool sendMode)
 {
 	Data requestData;
 	uint32_t partCount = 0;

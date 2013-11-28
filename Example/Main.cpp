@@ -124,6 +124,7 @@ static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 		// Prepare the part
 		part.fingerprint = CreateFingerprint(part.data);
 		part.offset = offset;
+        part.size = part.data.Size();
 		offset += part.data.Size();
 
 		// Add it to our batch
@@ -136,6 +137,9 @@ static void DoSend(CloudApi &cloudApi, program_options::variables_map &vm)
 
 	// Send up any stragglers
 	sendPartBatch();
+
+	// And now create the file
+	cloudApi.CreateFile(cloudPath, parts);
 }
 
 int main(int argc, const char *argv[])
