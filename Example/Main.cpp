@@ -47,16 +47,24 @@ static void DoGet(CloudApi &cloudApi, program_options::variables_map &vm)
 
 	// Fetch the parts and write them to the target file
 	std::ofstream file;
-	file.open(filePath, std::ios::binary);
+	file.open(filePath, std::ios::binary | std::ofstream::trunc);
 	if(!file.is_open())
 		throw std::logic_error(std::string("Failed to open ") + filePath);
 
+	uint64_t offset = 0;
 	for(auto &part : result.root.parts)
 	{
 		cloudApi.GetPart(part);
 
 		// And write it out
+		file.seekp(offset);
+        if(file.tellp() != offset)
+        {
+            std::cout << "Failed to seek to offset " << offset << std::endl;
+            return;
+        }
 		file.write(part.data.Cast<char>(), part.data.Size());
+		offset += part.data.Size();
 	}
 
 	std::cout << "Successfully downloaded " << cloudPath << " to " << filePath << std::endl;
@@ -136,6 +144,12 @@ int main(int argc, const char *argv[])
 
 	CloudApi::Config config;
 
+#if ORDER_BIG_ENDIAN
+    std::cout << "Order is big endian " << std::endl;
+#else
+    std::cout << "Order is little endian " << std::endl;
+#endif
+    
 	desc.add_options()
 		("consumer-key", program_options::value<std::string>()->required(), "The OAUTH consumer key (required)")
 		("consumer-secret", program_options::value<std::string>()->required(), "The OAUTH consumer secret (required)")

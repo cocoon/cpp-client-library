@@ -31,7 +31,7 @@ public:
 		
 		auto offset = (size_t) ((uint64_t)ptr - (uint64_t)&m_data[0]);
 
-		if(!offset < Size())
+		if(offset >= Size())
 			throw std::logic_error("Invalid cast");
 		
 		return offset;
@@ -65,15 +65,28 @@ public:
 
 	void Copy(size_t length, const Data &data)
 	{
-		if(Size() < data.Size())
-			throw std::logic_error("Not enough room to copy bytes");
-
 		Copy(length, data.Cast<uint8_t>(0, length));
 	}
 
 	void Copy(size_t length, const void *data)
 	{
+		if(Size() < length)
+			throw std::logic_error("Not enough room to copy bytes");
+
 		memcpy(Cast<uint8_t>(), data, length);
+	}
+
+	void Copy(size_t offset, size_t length, const Data &data)
+	{
+		Copy(offset, length, data.Cast<uint8_t>(0, length));
+	}
+
+	void Copy(size_t offset, size_t length, const void *data)
+	{
+		if(Size() < offset + length)
+			throw std::logic_error("Not enough room to copy bytes");
+
+		memcpy(Cast<uint8_t>(offset), data, length);
 	}
 
 	template<typename T>
@@ -92,6 +105,17 @@ public:
 			throw std::logic_error("Bad cast");
 
 		return reinterpret_cast<T *>(&m_data[offset]);
+	}
+
+	void Append(size_t length, const void *data)
+	{
+		Grow(length);
+		Copy(Size() - length, length, data);
+	}
+
+	void Append(const Data &data)
+	{
+		Append(data.Size(), data.Cast<uint8_t>());
 	}
 
 	bool IsEmpty() const { return m_data.empty(); }

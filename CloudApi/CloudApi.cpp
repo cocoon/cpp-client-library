@@ -104,14 +104,11 @@ void CloudApi::CreateFile(const std::string &cloudPath, const std::vector<PartIn
 	ProcessRequest("update_objects", headerFields, main_request);
 }
 
-std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &method)
+Data CloudApi::Post(std::map<std::string, std::string> &headerFields, const Data &data, const std::string &method)
 {
-	std::string response;
+	Data response;
 
 	auto completeUrl = m_config.address + "/" + method;
-
-	if(m_config.debugCallback)
-		m_config.debugCallback(std::string("Requesting ") + data);
 
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
@@ -124,8 +121,8 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 	curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, CurlWriteDataCallback);
 	curl_easy_setopt(m_curl, CURLOPT_POST, 1);
 	curl_easy_setopt(m_curl, CURLOPT_HEADER, 0);
-	curl_easy_setopt(m_curl, CURLOPT_POSTFIELDSIZE, data.size()); 
-	curl_easy_setopt(m_curl, CURLOPT_POSTFIELDS, &data[0]);
+	curl_easy_setopt(m_curl, CURLOPT_POSTFIELDSIZE, data.Size()); 
+	curl_easy_setopt(m_curl, CURLOPT_POSTFIELDS, data.Cast<uint8_t>());
 
 	headerFields.clear();
 	auto callbackInfo = std::make_pair(this, &headerFields);
@@ -142,31 +139,14 @@ std::string CloudApi::Post(std::map<std::string, std::string> &headerFields, con
 		throw;
 	}
 
-	if(m_config.debugCallback)
-		m_config.debugCallback(std::string("Reply " ) + response);
-
 	curl_slist_free_all(curlList);
 
 	return response;
 }
 
-size_t CloudApi::CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info)
+size_t CloudApi::CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, Data *> *info)
 {
-	std::vector<char> buf;
-	buf.reserve(size * nmemb + 1);
-
-	auto pbuf = &buf[0];
-
-	memset(&buf[0], '\0', size * nmemb + 1);
-	size_t i = 0;
-	for(;  i < nmemb; i++)
-	{
-		strncpy(pbuf, static_cast<char *>(ptr), size);
-		pbuf += size;
-		ptr += size;
-	}
-
-	info->second->append(&buf[0]);
+	info->second->Append(size * nmemb, ptr);
 	return size * nmemb;
 }
 
@@ -376,7 +356,7 @@ JSON::ValuePtr CloudApi::ProcessRequest(const std::string &method, std::map<std:
 {
 	auto data = EncodeJsonRequest(method, headerFields, _request);
 
-	auto response = Post(headerFields, data);
+	auto response = Post(headerFields, data).ToString();
 
 	auto value = JSON::Parse(response.c_str());
 
@@ -531,7 +511,7 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 	if(header->signature != BINARY_PARTS_HEADER_SIG)
 		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: Invalid header signature");
 	else if(header->errorCode)
-		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, replyData.Cast<char>() + sizeof(PARTS_HEADER));
+		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, std::string("BinaryParsePartsReply: Error code ") + std::to_string(header->errorCode));
 	else if(header->headerSize != sizeof(PARTS_HEADER))
 		throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: Invalid header size");
 	else if(parts && parts->size() != header->partCount)
@@ -563,8 +543,8 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 		else if(parts && partItem->errorCode)
 		{
 			partInfoIter->data.Release();
-			std::cerr << "Part error " << replyData.Cast<char>(replyData.PtrToOffset(partItem) + sizeof(PART_ITEM), partItem->payloadSize);
-			
+			std::cerr << "Part error " << replyData.Cast<char>(replyData.PtrToOffset(partItem) + 
+				sizeof(PART_ITEM), partItem->payloadSize);
 			continue;
 		}
 		else if(parts && std::string(partItem->fingerprint) != (*partInfoIter).fingerprint)
@@ -590,10 +570,21 @@ uint32_t CloudApi::BinaryParsePartsReply(Data &replyData,
 			throw CloudException(CLOUD_MALFORMED_PART_RESPONSE, "BinaryParsePartsReply: not enough data from cloud");
 
 		partInfoIter->data.Resize(partInfoIter->size);
-		partInfoIter->data.Copy(partInfoIter->size, replyData.Cast<char>(currentOffset + sizeof(PART_ITEM), partInfoIter->size));
+		partInfoIter->data.Copy(partInfoIter->size,
+			replyData.Cast<char>(currentOffset + sizeof(PART_ITEM), partInfoIter->size));
 		
 		auto actualHash = CreateFingerprint(partInfoIter->data);
-		assert(actualHash == partItem->fingerprint);
+		if(partInfoIter->size != partItem->partSize)
+		{
+			throw CloudException(INVALID_PART_SIZE, std::string("Failed to validate part fingerprint ") +
+				std::to_string(partItem->partSize) + " " + std::to_string(partInfoIter->size));
+		}
+
+		if(actualHash != partItem->fingerprint)
+		{
+			throw CloudException(INVALID_PART_FINGERPRINT, std::string("Failed to validate part fingerprint ") +
+				actualHash + " " + partInfoIter->fingerprint);
+		}
 
 		partInfoIter++;
 		partCount++;
@@ -631,6 +622,6 @@ Data CloudApi::ProcessBinaryPartsRequest(const std::string &method, std::map<std
 
 	BinaryPackPartsHeader(requestData, partCount);
 
-	return Data(Post(headerFields, requestData.ToString(), method));
+	return Post(headerFields, requestData.ToString(), method);
 }
 

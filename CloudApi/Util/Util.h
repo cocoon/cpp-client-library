@@ -70,15 +70,14 @@ namespace Copy {
 		MD5_Init(&md5Ctx);
 		MD5_Update(&md5Ctx, data.Cast<uint8_t>(), data.Size());
 		Data md5digest(16);
-		MD5_Final(md5digest.Cast<uint8_t>(), &md5Ctx);
-
+		MD5_Final(md5digest.Cast<uint8_t>(0, 16), &md5Ctx);
 		result += HexDump(md5digest);
 
 		SHA_CTX sha1Ctx;
 		SHA1_Init(&sha1Ctx);
 		SHA1_Update(&sha1Ctx, data.Cast<uint8_t>(), data.Size());
 		Data sha1digest(20);
-		SHA1_Final(sha1digest.Cast<uint8_t>(), &sha1Ctx);
+		SHA1_Final(sha1digest.Cast<uint8_t>(0, 20), &sha1Ctx);
 
 		result += HexDump(sha1digest);
 

@@ -56,6 +56,8 @@ public:
 		INVALID_PEER_SYNC_TOKEN = 1029,
 		INVALID_LIST_WATERMARK = 1030,
 		PART_NOT_FOUND = 1600,
+		INVALID_PART_SIZE = 9996,
+		INVALID_PART_FINGERPRINT = 9997,
 		CLOUD_MALFORMED_PART_RESPONSE = 9998,
 		CLOUD_RESPONSE_FAILURE = 9999, 
 	};
@@ -122,7 +124,7 @@ public:
 
 protected:
 	void Perform();
-	std::string Post(std::map<std::string, std::string> &headerFields, const std::string &data, const std::string &method = "jsonrpc");
+	Data Post(std::map<std::string, std::string> &headerFields, const Data &data, const std::string &method = "jsonrpc");
 
 	void SetCommonHeaderFields(std::map<std::string, std::string> &headerFields, const std::string &method = "jsonrpc");
 	std::string EncodeJsonRequest(const std::string &command, std::map<std::string, std::string> &headerFields, JSON::Object _request);
@@ -133,7 +135,7 @@ protected:
 
 	static int CurlDebugCallback(CURL *curl, curl_infotype infoType, char *data, size_t size, CloudApi *extra);
 	static size_t CurlWriteHeaderCallback(void *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::map<std::string, std::string> *> *info);
-	static size_t CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, std::string *> *info);
+	static size_t CurlWriteDataCallback(char *ptr, size_t size, size_t nmemb, std::pair<CloudApi *, Data *> *info);
 
 	// Define binary cloud api types
 	const uint32_t BINARY_PARTS_HEADER_VERSION = 1;
