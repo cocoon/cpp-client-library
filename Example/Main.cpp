@@ -148,12 +148,6 @@ int main(int argc, const char *argv[])
 
 	CloudApi::Config config;
 
-#if ORDER_BIG_ENDIAN
-    std::cout << "Order is big endian " << std::endl;
-#else
-    std::cout << "Order is little endian " << std::endl;
-#endif
-    
 	desc.add_options()
 		("consumer-key", program_options::value<std::string>()->required(), "The OAUTH consumer key (required)")
 		("consumer-secret", program_options::value<std::string>()->required(), "The OAUTH consumer secret (required)")
