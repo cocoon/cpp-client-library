@@ -168,7 +168,7 @@ Data CloudApi::Post(std::map<std::string, std::string> &headerFields, const Data
 	struct curl_slist *curlList = nullptr;
 	for(auto iter = headerFields.begin(); iter != headerFields.end(); iter++)
 		curlList = curl_slist_append(curlList, (iter->first + std::string(": ") + iter->second).c_str());
-	
+
 	auto callbackData = std::make_pair(this, &response);
 	curl_easy_setopt(m_curl, CURLOPT_URL, completeUrl.c_str());
 	curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, curlList);
@@ -410,6 +410,9 @@ std::string CloudApi::EncodeJsonRequest(const std::string &method, std::map<std:
 JSON::ValuePtr CloudApi::ProcessRequest(const std::string &method, std::map<std::string, std::string> &headerFields, JSON::Object _request)
 {
 	auto data = EncodeJsonRequest(method, headerFields, _request);
+
+	if(m_config.debugCallback)
+		m_config.debugCallback(std::string("Processing request ") + data);
 
 	auto response = Post(headerFields, data).ToString();
 
