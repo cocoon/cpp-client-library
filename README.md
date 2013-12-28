@@ -1,4 +1,4 @@
-example-cpp-client
+cpp-client-library
 ==================
 
 A c++ library for communicating with the copy cloud api
