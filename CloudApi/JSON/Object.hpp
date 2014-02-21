@@ -82,9 +82,9 @@ inline bool Object::Get<bool>(const std::string &key) const
 	if(value->IsBool())
 		return value->AsBool();
 	else if(value->IsNumber())
-		return value->AsNumber();
+		return value->AsNumber() != 0;
 	else
-		return std::stod(value->AsString());
+		return std::stod(value->AsString()) != 0;
 }
 
 template <>

@@ -72,7 +72,7 @@ public:
 			m_prepared = "Code: " + std::to_string(m_code) + " Message: " + m_message;
 		}
 
-		const char * what() const noexcept override { return m_prepared.c_str(); }
+		const char * what() const NOEXCEPT override { return m_prepared.c_str(); }
 
 		CloudError m_code;
 		std::string m_message;

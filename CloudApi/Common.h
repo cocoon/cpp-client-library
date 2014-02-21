@@ -12,6 +12,7 @@
 #include <map>
 #include <math.h>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
@@ -19,8 +20,20 @@
 #include <assert.h>
 #include <fstream>
 #include <list>
-#include <openssl/md5.h>
-#include <openssl/sha.h>
+
+#if defined(WINDOWS)
+	#include "openssl/md5.h"
+	#include "openssl/sha.h"
+#else
+	#include <openssl/md5.h>
+	#include <openssl/sha.h>
+#endif
+
+#ifndef _MSC_VER
+	#define NOEXCEPT noexcept
+#else
+	#define NOEXCEPT
+#endif
 
 #define	BSWAP_64(x)	(((uint64_t)(x) << 56) | \
 			(((uint64_t)(x) << 40) & 0xff000000000000ULL) | \
