@@ -302,7 +302,7 @@ CloudApi::ListResult CloudApi::ListPath(ListConfig &config)
 	auto list_result = ProcessRequest("list_objects", headerFields, main_request)->AsObject();
 
 	config.index = list_result.Get<uint64_t>("list_watermark");
-	result.more = list_result.Get<uint32_t>("more_items");
+	result.more = list_result.Get<uint32_t>("more_items") > 0;
 
 	// Force sync index to increment so we don't loop forever
 	if(!config.index)
@@ -665,7 +665,7 @@ Data CloudApi::ProcessBinaryPartsRequest(const std::string &method, std::map<std
 {
 	Data requestData;
 	uint32_t partCount = 0;
-	uint32_t totalPartSize = 0;
+	uint64_t totalPartSize = 0;
 
 	for(auto &part : parts)
 	{

@@ -58,7 +58,7 @@ static void DoGet(CloudApi &cloudApi, program_options::variables_map &vm)
 
 		// And write it out
 		file.seekp(offset);
-        if(file.tellp() != offset)
+        if(static_cast<uint64_t>(file.tellp()) != offset)
         {
             std::cout << "Failed to seek to offset " << offset << std::endl;
             return;
